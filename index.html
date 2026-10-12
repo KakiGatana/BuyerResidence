@@ -1,0 +1,617 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Carnet Acquéreurs</title>
+<meta name="description" content="Carnet simple pour suivre ses acquéreurs et leur envoyer des messages types.">
+<meta name="theme-color" content="#1f3a5f">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Acquéreurs">
+<style>
+:root{
+  --bg:#f6f5f2; --surface:#ffffff; --surface-2:#efede8; --text:#1d1d1b; --muted:#6b6a66;
+  --line:#e2dfd8; --accent:#1f3a5f; --accent-text:#ffffff; --accent-soft:#e3e9f2;
+  --danger:#b3261e; --ok:#2e7d4f; --ok-soft:#e2f2e8; --warn-soft:#fbf1dc;
+  --radius:12px; --shadow:0 1px 2px rgba(0,0,0,.06),0 2px 8px rgba(0,0,0,.04);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#141413; --surface:#1e1e1c; --surface-2:#2a2a27; --text:#ecebe7; --muted:#a3a19b;
+    --line:#34332f; --accent:#8fb0dc; --accent-text:#0f1a29; --accent-soft:#25303f;
+    --danger:#f2867e; --ok:#7fcf9f; --ok-soft:#1f3328; --warn-soft:#3a3221;
+    --shadow:none;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#141413; --surface:#1e1e1c; --surface-2:#2a2a27; --text:#ecebe7; --muted:#a3a19b;
+  --line:#34332f; --accent:#8fb0dc; --accent-text:#0f1a29; --accent-soft:#25303f;
+  --danger:#f2867e; --ok:#7fcf9f; --ok-soft:#1f3328; --warn-soft:#3a3221;
+  --shadow:none;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding-bottom:calc(90px + env(safe-area-inset-bottom))}
+a{color:var(--accent)}
+header{position:sticky;top:0;z-index:5;background:var(--surface);border-bottom:1px solid var(--line);padding-top:env(safe-area-inset-top)}
+.hwrap,main{max-width:720px;margin:0 auto;padding:0 16px}
+.hwrap{display:flex;align-items:center;gap:12px;height:56px}
+.brand{font-weight:700;font-size:17px;margin-right:auto;white-space:nowrap}
+nav{display:flex;gap:4px}
+nav a{text-decoration:none;color:var(--muted);padding:8px 10px;border-radius:8px;font-size:15px}
+nav a.on{color:var(--text);background:var(--surface-2);font-weight:600}
+main{padding-top:16px}
+h1{font-size:22px;margin:4px 0 12px}
+.back{display:inline-block;text-decoration:none;color:var(--muted);font-size:15px;padding:4px 0}
+.btn{appearance:none;border:1px solid var(--line);background:var(--surface);color:var(--text);font:inherit;font-size:15px;padding:9px 14px;border-radius:10px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:42px;white-space:nowrap}
+.btn:disabled{opacity:.45;cursor:default}
+.btn.primary{background:var(--accent);color:var(--accent-text);border-color:var(--accent);font-weight:600}
+.btn.danger{color:var(--danger)}
+.btn.small{min-height:36px;padding:6px 11px;font-size:14px}
+.btn.link{border-color:transparent;background:none;color:var(--accent);padding-left:6px;padding-right:6px}
+input,select,textarea{font:inherit;font-size:16px;color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%;min-height:44px}
+textarea{resize:vertical;line-height:1.45}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:transparent}
+label{display:block;font-size:14px;color:var(--muted);margin-bottom:12px}
+label>input,label>select,label>textarea{margin-top:4px}
+.lbl{font-size:14px;color:var(--muted);margin:4px 0 6px}
+small{color:var(--muted);font-weight:400}
+
+/* Liste */
+.toolbar{display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
+.toprow{display:flex;gap:8px}
+.toprow input{flex:1}
+.filters{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.filters select,.filters input{font-size:15px;padding:8px 10px;min-height:40px}
+@media (max-width:560px){.filters{grid-template-columns:1fr 1fr}}
+.selrow{display:flex;align-items:center;gap:4px;margin:6px 0 8px;flex-wrap:wrap}
+.selrow .count{margin-right:auto;color:var(--muted);font-size:14px}
+.list{list-style:none;margin:0;padding:0;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+.row{display:flex;align-items:stretch;border-top:1px solid var(--line)}
+.row:first-child{border-top:0}
+.row.is-sel{background:var(--accent-soft)}
+.chk{display:flex;align-items:center;justify-content:center;padding:0 6px 0 14px;margin:0;cursor:pointer}
+.chk input{width:22px;height:22px;min-height:0;margin:0;accent-color:var(--accent);cursor:pointer}
+.who{flex:1;min-width:0;text-align:left;background:none;border:0;font:inherit;color:inherit;padding:12px 14px 12px 8px;cursor:pointer;display:flex;flex-direction:column;gap:2px}
+.name{font-weight:600}
+.meta,.meta2{font-size:14px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.meta2{font-size:13px}
+.badge{display:inline-block;font-size:12px;font-weight:500;padding:1px 8px;border-radius:99px;background:var(--surface-2);color:var(--muted);vertical-align:2px;margin-left:4px}
+.empty{padding:28px 16px;text-align:center;color:var(--muted)}
+.banner{display:block;background:var(--warn-soft);border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:14px;color:var(--text);text-decoration:none}
+.actionbar{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--surface);border-top:1px solid var(--line);padding:10px 16px calc(10px + env(safe-area-inset-bottom));box-shadow:0 -4px 16px rgba(0,0,0,.08)}
+.actionbar .in{max-width:688px;margin:0 auto;display:flex;align-items:center;gap:10px}
+.actionbar .in span{margin-right:auto}
+
+/* Formulaire */
+.form fieldset{border:1px solid var(--line);background:var(--surface);border-radius:var(--radius);padding:14px 14px 4px;margin:0 0 14px;box-shadow:var(--shadow);min-width:0}
+.form legend{font-weight:700;padding:0 6px;margin-left:-6px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+.chip{margin:0;cursor:pointer}
+.chip input{position:absolute;opacity:0;pointer-events:none}
+.chip span{display:inline-block;border:1px solid var(--line);border-radius:99px;padding:6px 12px;font-size:14px;color:var(--text);background:var(--surface)}
+.chip input:checked+span{background:var(--accent);border-color:var(--accent);color:var(--accent-text)}
+.chip input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
+.notes{list-style:none;margin:0 0 10px;padding:0}
+.notes li{border-left:3px solid var(--line);padding:4px 0 4px 10px;margin-bottom:8px;display:flex;gap:8px}
+.notes .nt{flex:1;white-space:pre-wrap;font-size:15px}
+.notes .nd{display:block;font-size:12px;color:var(--muted)}
+.notes button{background:none;border:0;color:var(--muted);font-size:18px;cursor:pointer;padding:0 4px;align-self:flex-start}
+.formactions{display:flex;gap:10px;justify-content:space-between;margin:4px 0 20px}
+.contact{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+
+/* Cartes */
+.cards{display:flex;flex-direction:column;gap:10px}
+.card{display:block;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow);color:inherit;text-decoration:none}
+.card h3{margin:0 0 4px;font-size:16px}
+.card p{margin:0;color:var(--muted);font-size:14px;white-space:pre-wrap;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.ph{display:flex;flex-wrap:wrap;gap:6px;margin:-4px 0 12px}
+.section{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px;margin-bottom:14px;box-shadow:var(--shadow)}
+.section h2{font-size:16px;margin:0 0 10px}
+.section p{margin:0 0 10px;font-size:14px;color:var(--muted)}
+.btnrow{display:flex;gap:8px;flex-wrap:wrap}
+
+/* Envoi */
+.recips{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.recip{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;box-shadow:var(--shadow)}
+.recip.done{background:var(--ok-soft);border-color:transparent}
+.rhead{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.rhead strong{margin-right:auto}
+.ok{color:var(--ok);font-size:14px;font-weight:600}
+.recip details{margin-bottom:8px}
+.recip summary{cursor:pointer;font-size:14px;color:var(--muted)}
+.preview{white-space:pre-wrap;font:inherit;font-size:14px;background:var(--surface-2);border-radius:8px;padding:10px;margin:6px 0 0}
+.toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--text);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;z-index:10;max-width:calc(100% - 32px);text-align:center}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<header>
+  <div class="hwrap">
+    <span class="brand">Acquéreurs</span>
+    <nav>
+      <a href="#/" data-nav="list">Liste</a>
+      <a href="#/modeles" data-nav="modeles">Messages</a>
+      <a href="#/reglages" data-nav="reglages" aria-label="Réglages">Réglages</a>
+    </nav>
+  </div>
+</header>
+<main id="app"></main>
+<div id="actionbar" class="actionbar" hidden></div>
+
+<script>
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const app = $('#app');
+const KEY = 'carnet-acquereurs-v1';
+const TYPES = ['Studio', 'T2', 'T3', 'T4', 'T5+', 'Maison'];
+const CRITERES = ['Parking', 'Balcon / terrasse', 'Jardin', 'Ascenseur', 'Cave', 'Pas de RDC'];
+const STATUTS = { actif: 'Actif', pause: 'En pause', achete: 'A acheté' };
+const PLACEHOLDERS = ['prenom', 'nom', 'quartiers', 'types', 'budget', 'signature'];
+const DAY = 86400000;
+
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const norm = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+/* ---------- Données ---------- */
+function defaults() {
+  return {
+    version: 1,
+    signature: '',
+    lastExport: 0,
+    quartiers: ['Vélizy-Bas (Village)', 'Mozart', 'Europe', 'Louvois', 'Le Clos', 'Pointe Ouest', 'Vélizy-Haut'],
+    acquereurs: [],
+    modeles: [
+      { id: uid(), titre: 'Nouveau bien', texte: "Bonjour {prenom},\n\nUn nouveau bien correspondant à votre recherche vient de rentrer :\n\n[décrire le bien]\n\nSouhaitez-vous le visiter ? Je suis disponible cette semaine.\n\nBien cordialement,\n{signature}" },
+      { id: uid(), titre: 'Relance', texte: "Bonjour {prenom},\n\nJe reviens vers vous concernant votre projet d'achat sur Vélizy. Votre recherche est-elle toujours d'actualité ? Vos critères ont-ils évolué ?\n\nBien cordialement,\n{signature}" },
+      { id: uid(), titre: 'Baisse de prix', texte: "Bonjour {prenom},\n\nLe bien que nous avions évoqué vient de baisser de prix :\n\n[détails]\n\nN'hésitez pas à me rappeler.\n\nBien cordialement,\n{signature}" }
+    ]
+  };
+}
+function load() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) return Object.assign(defaults(), JSON.parse(raw));
+  } catch (e) {}
+  return defaults();
+}
+let data = load();
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(data)); }
+  catch (e) { toast("Impossible d'enregistrer sur cet appareil"); }
+}
+const ui = { q: '', fq: '', ft: '', fs: 'actif', fb: '', selected: new Set(), sent: new Set(), tplId: null, draft: null, subject: '', draftFor: null };
+
+/* ---------- Utilitaires ---------- */
+const fullName = a => [a.prenom, a.nom].filter(Boolean).join(' ') || 'Sans nom';
+const fmtBudget = k => k ? `${Number(k).toLocaleString('fr-FR')} k€` : '';
+function summary(a) {
+  return [a.types.join(', '), fmtBudget(a.budget), a.quartiers.length ? a.quartiers.join(', ') : 'Tout Vélizy']
+    .filter(Boolean).join(' · ');
+}
+function ago(ts) {
+  const d = Math.floor((startOfDay(Date.now()) - startOfDay(ts)) / DAY);
+  if (d <= 0) return "aujourd'hui";
+  if (d === 1) return 'hier';
+  if (d < 30) return `il y a ${d} j`;
+  return 'le ' + new Date(ts).toLocaleDateString('fr-FR');
+}
+function startOfDay(ts) { const d = new Date(ts); d.setHours(0, 0, 0, 0); return d.getTime(); }
+const fmtDate = ts => new Date(ts).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) + ' · ' + new Date(ts).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+const telClean = t => String(t || '').replace(/[^\d+]/g, '');
+function telIntl(t) {
+  let d = String(t || '').replace(/\D/g, '');
+  if (d.startsWith('00')) d = d.slice(2);
+  else if (d.length === 10 && d.startsWith('0')) d = '33' + d.slice(1);
+  return d;
+}
+function fill(text, a) {
+  const vals = {
+    prenom: a.prenom || '', nom: a.nom || '',
+    quartiers: a.quartiers.length ? a.quartiers.join(', ') : 'Vélizy',
+    types: a.types.join(', '), budget: fmtBudget(a.budget), signature: data.signature || ''
+  };
+  return text.replace(/\{(\w+)\}/g, (m, k) => k in vals ? vals[k] : m);
+}
+function links(a, body, subject) {
+  const out = [];
+  if (a.tel) {
+    out.push({ via: 'SMS', href: `sms:${telClean(a.tel)}?&body=${encodeURIComponent(body)}` });
+    out.push({ via: 'WhatsApp', href: `https://wa.me/${telIntl(a.tel)}?text=${encodeURIComponent(body)}`, blank: true });
+  }
+  if (a.email) out.push({ via: 'Email', href: `mailto:${encodeURIComponent(a.email)}?subject=${encodeURIComponent(subject || '')}&body=${encodeURIComponent(body)}` });
+  return out;
+}
+let toastTimer;
+function toast(msg) {
+  let t = $('.toast');
+  if (!t) { t = document.createElement('div'); t.className = 'toast'; t.setAttribute('role', 'status'); document.body.appendChild(t); }
+  t.textContent = msg; t.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, 2200);
+}
+function chips(name, options, checked) {
+  return options.map(o => `<label class="chip"><input type="checkbox" name="${name}" value="${esc(o)}" ${checked.includes(o) ? 'checked' : ''}><span>${esc(o)}</span></label>`).join('');
+}
+function setActionbar(html) {
+  const bar = $('#actionbar');
+  bar.innerHTML = html ? `<div class="in">${html}</div>` : '';
+  bar.hidden = !html;
+}
+
+/* ---------- Liste ---------- */
+function filtered() {
+  const words = norm(ui.q).split(/\s+/).filter(Boolean);
+  return data.acquereurs.filter(a => {
+    if (ui.fs && a.statut !== ui.fs) return false;
+    if (ui.fq && a.quartiers.length && !a.quartiers.includes(ui.fq)) return false;
+    if (ui.ft && a.types.length && !a.types.includes(ui.ft)) return false;
+    if (ui.fb && a.budget && a.budget < Number(ui.fb)) return false;
+    if (words.length) {
+      const hay = norm([a.prenom, a.nom, a.tel, telClean(a.tel), a.email, a.autres, ...a.notes.map(n => n.t)].join(' '));
+      if (!words.every(w => hay.includes(w))) return false;
+    }
+    return true;
+  }).sort((x, y) => (x.nom + ' ' + x.prenom).localeCompare(y.nom + ' ' + y.prenom, 'fr'));
+}
+
+function renderList() {
+  const needBackup = data.acquereurs.length && Date.now() - (data.lastExport || 0) > 14 * DAY;
+  app.innerHTML = `
+    ${needBackup ? '<a class="banner" href="#/reglages">Pensez à faire une sauvegarde de vos acquéreurs (Réglages).</a>' : ''}
+    <div class="toolbar">
+      <div class="toprow">
+        <input type="search" id="q" placeholder="Rechercher un nom, un numéro, une note…" value="${esc(ui.q)}" aria-label="Rechercher">
+        <a class="btn primary" href="#/a/new">+ Nouveau</a>
+      </div>
+      <div class="filters">
+        <select id="fq" aria-label="Quartier"><option value="">Tous quartiers</option>${data.quartiers.map(q => `<option ${ui.fq === q ? 'selected' : ''}>${esc(q)}</option>`).join('')}</select>
+        <select id="ft" aria-label="Type de bien"><option value="">Tous types</option>${TYPES.map(t => `<option ${ui.ft === t ? 'selected' : ''}>${t}</option>`).join('')}</select>
+        <select id="fs" aria-label="Statut"><option value="">Tous statuts</option>${Object.entries(STATUTS).map(([k, v]) => `<option value="${k}" ${ui.fs === k ? 'selected' : ''}>${k === 'actif' ? 'Actifs' : v}</option>`).join('')}</select>
+        <input id="fb" type="number" inputmode="numeric" min="0" step="5" placeholder="Prix du bien (k€)" value="${esc(ui.fb)}" aria-label="Prix du bien en k€ : affiche les acquéreurs dont le budget suffit">
+      </div>
+    </div>
+    <div class="selrow">
+      <span class="count" id="count"></span>
+      <button class="btn link small" id="selAll">Tout sélectionner</button>
+      <button class="btn link small" id="selNone">Tout désélectionner</button>
+    </div>
+    <ul class="list" id="list"></ul>`;
+
+  $('#q').oninput = e => { ui.q = e.target.value; renderItems(); };
+  for (const k of ['fq', 'ft', 'fs', 'fb']) $('#' + k).oninput = $('#' + k).onchange = e => { ui[k] = e.target.value; renderItems(); };
+  $('#selAll').onclick = () => { filtered().forEach(a => ui.selected.add(a.id)); renderItems(); };
+  $('#selNone').onclick = () => { ui.selected.clear(); ui.sent.clear(); renderItems(); };
+  $('#list').onchange = e => {
+    const id = e.target.dataset.sel; if (!id) return;
+    e.target.checked ? ui.selected.add(id) : ui.selected.delete(id);
+    renderItems();
+  };
+  $('#list').onclick = e => {
+    const b = e.target.closest('[data-open]');
+    if (b) location.hash = '#/a/' + b.dataset.open;
+  };
+  renderItems();
+}
+
+function renderItems() {
+  const list = filtered();
+  $('#list').innerHTML = list.length ? list.map(a => `
+    <li class="row ${ui.selected.has(a.id) ? 'is-sel' : ''}">
+      <label class="chk"><input type="checkbox" data-sel="${a.id}" ${ui.selected.has(a.id) ? 'checked' : ''} aria-label="Sélectionner ${esc(fullName(a))}"></label>
+      <button class="who" data-open="${a.id}">
+        <span class="name">${esc(fullName(a))}${a.statut !== 'actif' ? ` <span class="badge">${STATUTS[a.statut]}</span>` : ''}</span>
+        <span class="meta">${esc(summary(a))}</span>
+        ${a.lastContact ? `<span class="meta2">Contacté ${ago(a.lastContact)}</span>` : ''}
+      </button>
+    </li>`).join('')
+    : `<li class="empty">${data.acquereurs.length ? 'Aucun acquéreur ne correspond à ces filtres.' : 'Aucun acquéreur pour l’instant.<br>Appuyez sur « + Nouveau » pour commencer.'}</li>`;
+
+  const n = ui.selected.size;
+  $('#count').textContent = `${list.length} acquéreur${list.length > 1 ? 's' : ''}`;
+  $('#selAll').disabled = !list.length || list.every(a => ui.selected.has(a.id));
+  $('#selNone').disabled = !n;
+  setActionbar(n ? `<span><strong>${n}</strong> sélectionné${n > 1 ? 's' : ''}</span><a class="btn primary" href="#/envoi">Envoyer un message</a>` : '');
+}
+
+/* ---------- Fiche acquéreur ---------- */
+function blank() {
+  return { id: uid(), prenom: '', nom: '', tel: '', email: '', budget: null, surface: null, types: [], quartiers: [], criteres: [], autres: '', financement: '', statut: 'actif', notes: [], created: Date.now(), updated: Date.now(), lastContact: 0 };
+}
+function renderFiche(id) {
+  const isNew = id === 'new';
+  const a = isNew ? blank() : data.acquereurs.find(x => x.id === id);
+  if (!a) { location.hash = '#/'; return; }
+  setActionbar('');
+  const quartiers = [...new Set([...data.quartiers, ...a.quartiers])];
+  app.innerHTML = `
+    <a class="back" href="#/">← Acquéreurs</a>
+    <h1>${isNew ? 'Nouvel acquéreur' : esc(fullName(a))}</h1>
+    ${!isNew && (a.tel || a.email) ? `<div class="contact">
+      ${a.tel ? `<a class="btn small" href="tel:${esc(telClean(a.tel))}">Appeler</a><a class="btn small" href="sms:${esc(telClean(a.tel))}">SMS</a><a class="btn small" href="https://wa.me/${telIntl(a.tel)}" target="_blank" rel="noopener">WhatsApp</a>` : ''}
+      ${a.email ? `<a class="btn small" href="mailto:${esc(a.email)}">Email</a>` : ''}
+    </div>` : ''}
+    <form id="f" class="form" autocomplete="off">
+      <fieldset><legend>Contact</legend>
+        <div class="grid2">
+          <label>Prénom<input name="prenom" value="${esc(a.prenom)}"></label>
+          <label>Nom<input name="nom" value="${esc(a.nom)}"></label>
+        </div>
+        <label>Téléphone<input name="tel" type="tel" inputmode="tel" value="${esc(a.tel)}"></label>
+        <label>Email<input name="email" type="email" inputmode="email" value="${esc(a.email)}"></label>
+      </fieldset>
+      <fieldset><legend>Recherche</legend>
+        <div class="grid2">
+          <label>Budget max (k€)<input name="budget" type="number" inputmode="numeric" min="0" step="5" value="${a.budget ?? ''}"></label>
+          <label>Surface min (m²)<input name="surface" type="number" inputmode="numeric" min="0" value="${a.surface ?? ''}"></label>
+        </div>
+        <div class="lbl">Type de bien</div>
+        <div class="chips">${chips('types', TYPES, a.types)}</div>
+        <div class="lbl">Quartiers <small>(aucun coché = tout Vélizy)</small></div>
+        <div class="chips">${chips('quartiers', quartiers, a.quartiers)}</div>
+        <div class="lbl">Critères</div>
+        <div class="chips">${chips('criteres', CRITERES, a.criteres)}</div>
+        <label>Autres critères<input name="autres" value="${esc(a.autres)}" placeholder="Proche école, dernier étage…"></label>
+        <label>Financement<input name="financement" value="${esc(a.financement)}" placeholder="Accord de prêt, vente en cours…"></label>
+      </fieldset>
+      <fieldset><legend>Suivi</legend>
+        <label>Statut<select name="statut">${Object.entries(STATUTS).map(([k, v]) => `<option value="${k}" ${a.statut === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
+        <div class="lbl">Notes</div>
+        <ul class="notes" id="notes">${a.notes.map((n, i) => `<li><div class="nt"><span class="nd">${fmtDate(n.d)}</span>${esc(n.t)}</div><button type="button" data-delnote="${i}" aria-label="Supprimer la note">×</button></li>`).join('')}</ul>
+        <label><textarea name="newnote" rows="3" placeholder="Ajouter une note : appel, visite, remarque…"></textarea></label>
+      </fieldset>
+      <div class="formactions">
+        <button class="btn primary" type="submit">Enregistrer</button>
+        ${isNew ? '' : '<button class="btn danger" type="button" id="del">Supprimer</button>'}
+      </div>
+    </form>`;
+
+  $('#notes').onclick = e => {
+    const i = e.target.dataset.delnote; if (i == null) return;
+    if (!confirm('Supprimer cette note ?')) return;
+    a.notes.splice(Number(i), 1); save();
+    e.target.closest('li').remove();
+  };
+  $('#f').onsubmit = e => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const v = k => String(fd.get(k) || '').trim();
+    if (!v('prenom') && !v('nom')) { toast('Indiquez au moins un prénom ou un nom'); return; }
+    Object.assign(a, {
+      prenom: v('prenom'), nom: v('nom'), tel: v('tel'), email: v('email'),
+      budget: v('budget') ? Number(v('budget')) : null, surface: v('surface') ? Number(v('surface')) : null,
+      types: fd.getAll('types'), quartiers: fd.getAll('quartiers'), criteres: fd.getAll('criteres'),
+      autres: v('autres'), financement: v('financement'), statut: v('statut') || 'actif', updated: Date.now()
+    });
+    if (v('newnote')) a.notes.unshift({ d: Date.now(), t: v('newnote') });
+    if (isNew) data.acquereurs.push(a);
+    save(); toast('Enregistré');
+    location.hash = '#/';
+  };
+  const del = $('#del');
+  if (del) del.onclick = () => {
+    if (!confirm(`Supprimer ${fullName(a)} ? Cette action est définitive.`)) return;
+    data.acquereurs = data.acquereurs.filter(x => x.id !== a.id);
+    ui.selected.delete(a.id); save(); toast('Acquéreur supprimé');
+    location.hash = '#/';
+  };
+}
+
+/* ---------- Modèles de messages ---------- */
+function renderModeles() {
+  setActionbar('');
+  app.innerHTML = `
+    <h1>Messages types</h1>
+    <div class="cards">
+      ${data.modeles.map(m => `<a class="card" href="#/m/${m.id}"><h3>${esc(m.titre || 'Sans titre')}</h3><p>${esc(m.texte)}</p></a>`).join('') || '<p class="empty">Aucun modèle.</p>'}
+    </div>
+    <p><a class="btn primary" href="#/m/new">+ Nouveau modèle</a></p>
+    <p style="color:var(--muted);font-size:14px">Pour envoyer : cochez des acquéreurs dans la liste puis « Envoyer un message ».</p>`;
+}
+function renderModele(id) {
+  setActionbar('');
+  const isNew = id === 'new';
+  const m = isNew ? { id: uid(), titre: '', texte: 'Bonjour {prenom},\n\n\n\nBien cordialement,\n{signature}' } : data.modeles.find(x => x.id === id);
+  if (!m) { location.hash = '#/modeles'; return; }
+  app.innerHTML = `
+    <a class="back" href="#/modeles">← Messages types</a>
+    <h1>${isNew ? 'Nouveau modèle' : 'Modifier le modèle'}</h1>
+    <form id="f" class="form">
+      <fieldset>
+        <label>Titre<input name="titre" value="${esc(m.titre)}" placeholder="Ex. Nouveau bien"></label>
+        <label>Message<textarea name="texte" id="texte" rows="10">${esc(m.texte)}</textarea></label>
+        <div class="lbl">Insérer un champ (remplacé automatiquement pour chaque acquéreur)</div>
+        <div class="ph">${PLACEHOLDERS.map(p => `<button type="button" class="btn small" data-ph="${p}">{${p}}</button>`).join('')}</div>
+      </fieldset>
+      <div class="formactions">
+        <button class="btn primary" type="submit">Enregistrer</button>
+        ${isNew ? '' : '<button class="btn danger" type="button" id="del">Supprimer</button>'}
+      </div>
+    </form>`;
+  $('.ph').onclick = e => {
+    const p = e.target.dataset.ph; if (!p) return;
+    const ta = $('#texte'), s = ta.selectionStart, end = ta.selectionEnd, ins = `{${p}}`;
+    ta.value = ta.value.slice(0, s) + ins + ta.value.slice(end);
+    ta.focus(); ta.selectionStart = ta.selectionEnd = s + ins.length;
+  };
+  $('#f').onsubmit = e => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    m.titre = String(fd.get('titre')).trim() || 'Sans titre';
+    m.texte = String(fd.get('texte'));
+    if (isNew) data.modeles.push(m);
+    if (ui.draftFor === m.id) ui.draftFor = null;
+    save(); toast('Modèle enregistré');
+    location.hash = '#/modeles';
+  };
+  const del = $('#del');
+  if (del) del.onclick = () => {
+    if (!confirm('Supprimer ce modèle ?')) return;
+    data.modeles = data.modeles.filter(x => x.id !== m.id);
+    save(); location.hash = '#/modeles';
+  };
+}
+
+/* ---------- Envoi ---------- */
+function renderEnvoi() {
+  const sel = data.acquereurs.filter(a => ui.selected.has(a.id))
+    .sort((x, y) => (x.nom + ' ' + x.prenom).localeCompare(y.nom + ' ' + y.prenom, 'fr'));
+  setActionbar('');
+  if (!sel.length) {
+    app.innerHTML = `<a class="back" href="#/">← Acquéreurs</a><h1>Envoyer un message</h1><p class="empty">Aucun acquéreur sélectionné.<br><a href="#/">Cochez des acquéreurs dans la liste.</a></p>`;
+    return;
+  }
+  if (!data.modeles.length) {
+    app.innerHTML = `<a class="back" href="#/">← Acquéreurs</a><h1>Envoyer un message</h1><p class="empty">Aucun message type.<br><a href="#/m/new">Créer un modèle</a></p>`;
+    return;
+  }
+  const m = data.modeles.find(x => x.id === ui.tplId) || data.modeles[0];
+  if (ui.draftFor !== m.id) { ui.tplId = m.id; ui.draft = m.texte; ui.subject = m.titre; ui.draftFor = m.id; }
+
+  app.innerHTML = `
+    <a class="back" href="#/">← Acquéreurs</a>
+    <h1>Envoyer un message</h1>
+    <div class="section">
+      <label>Message type<select id="tpl">${data.modeles.map(x => `<option value="${x.id}" ${x.id === m.id ? 'selected' : ''}>${esc(x.titre)}</option>`).join('')}</select></label>
+      <label>Message <small>· complétez-le ici si besoin, {prenom} etc. sont remplacés pour chacun</small><textarea id="draft" rows="9">${esc(ui.draft)}</textarea></label>
+      <label>Objet (pour les emails)<input id="subj" value="${esc(ui.subject)}"></label>
+    </div>
+    <div class="selrow"><span class="count" id="progress"></span></div>
+    <ul class="recips" id="recips"></ul>
+    <p style="margin-top:16px"><button class="btn" id="finish">Terminer et tout désélectionner</button></p>`;
+
+  $('#tpl').onchange = e => { ui.tplId = e.target.value; ui.draftFor = null; renderEnvoi(); };
+  $('#draft').oninput = e => { ui.draft = e.target.value; renderRecips(sel, m); };
+  $('#subj').oninput = e => { ui.subject = e.target.value; renderRecips(sel, m); };
+  $('#finish').onclick = () => { ui.selected.clear(); ui.sent.clear(); location.hash = '#/'; };
+  $('#recips').onclick = e => {
+    const el = e.target.closest('[data-via]'); if (!el) return;
+    const a = data.acquereurs.find(x => x.id === el.dataset.id); if (!a) return;
+    const body = fill(ui.draft, a);
+    if (el.dataset.via === 'copy') {
+      e.preventDefault();
+      (navigator.clipboard ? navigator.clipboard.writeText(body) : Promise.reject())
+        .then(() => toast('Message copié'), () => toast('Copie impossible sur cet appareil'));
+      return;
+    }
+    if (!ui.sent.has(a.id)) {
+      ui.sent.add(a.id);
+      a.lastContact = Date.now();
+      a.notes.unshift({ d: Date.now(), t: `Message « ${m.titre} » envoyé par ${el.dataset.via}` });
+      save();
+    }
+    // Laisse le lien s'ouvrir avant de redessiner la liste
+    setTimeout(() => renderRecips(sel, m), 400);
+  };
+  renderRecips(sel, m);
+}
+function renderRecips(sel, m) {
+  const done = sel.filter(a => ui.sent.has(a.id)).length;
+  $('#progress').textContent = `${sel.length} destinataire${sel.length > 1 ? 's' : ''} · ${done} envoyé${done > 1 ? 's' : ''}`;
+  $('#recips').innerHTML = sel.map(a => {
+    const body = fill(ui.draft, a);
+    const ls = links(a, body, fill(ui.subject, a));
+    const sent = ui.sent.has(a.id);
+    return `<li class="recip ${sent ? 'done' : ''}">
+      <div class="rhead"><strong>${esc(fullName(a))}</strong>${sent ? '<span class="ok">✓ Envoyé</span>' : ''}</div>
+      <details ${sel.length === 1 ? 'open' : ''}><summary>Voir le message</summary><div class="preview">${esc(body)}</div></details>
+      <div class="btnrow">
+        ${ls.map(l => `<a class="btn small ${sent ? '' : 'primary'}" href="${esc(l.href)}" data-id="${a.id}" data-via="${l.via}" ${l.blank ? 'target="_blank" rel="noopener"' : ''}>${l.via}</a>`).join('')}
+        <button class="btn small" data-id="${a.id}" data-via="copy">Copier</button>
+        ${ls.length ? '' : '<span style="color:var(--muted);font-size:14px;align-self:center">Pas de téléphone ni d’email</span>'}
+      </div>
+    </li>`;
+  }).join('');
+}
+
+/* ---------- Réglages ---------- */
+function renderReglages() {
+  setActionbar('');
+  app.innerHTML = `
+    <h1>Réglages</h1>
+    <div class="section">
+      <h2>Signature</h2>
+      <p>Remplace {signature} dans les messages.</p>
+      <textarea id="sig" rows="3" placeholder="Prénom Nom&#10;La Résidence Vélizy&#10;06 …">${esc(data.signature)}</textarea>
+    </div>
+    <div class="section">
+      <h2>Quartiers</h2>
+      <p>Un quartier par ligne.</p>
+      <textarea id="qs" rows="7">${esc(data.quartiers.join('\n'))}</textarea>
+    </div>
+    <div class="btnrow" style="margin-bottom:14px"><button class="btn primary" id="saveSet">Enregistrer</button></div>
+    <div class="section">
+      <h2>Sauvegarde</h2>
+      <p>Les données restent uniquement sur cet appareil. Exportez régulièrement un fichier de sauvegarde (à garder en lieu sûr) : il sert aussi à transférer les données sur un autre appareil.
+      ${data.lastExport ? `<br>Dernière sauvegarde : ${new Date(data.lastExport).toLocaleDateString('fr-FR')}.` : '<br>Aucune sauvegarde pour l’instant.'}</p>
+      <div class="btnrow">
+        <button class="btn" id="exp">Exporter</button>
+        <label class="btn" style="margin:0;color:var(--text)">Importer<input type="file" id="imp" accept="application/json,.json" hidden></label>
+      </div>
+    </div>
+    <div class="section">
+      <h2>Tout effacer</h2>
+      <p>Supprime tous les acquéreurs et modèles de cet appareil.</p>
+      <button class="btn danger" id="wipe">Tout effacer</button>
+    </div>`;
+
+  $('#saveSet').onclick = () => {
+    data.signature = $('#sig').value.trim();
+    data.quartiers = [...new Set($('#qs').value.split('\n').map(s => s.trim()).filter(Boolean))];
+    save(); toast('Réglages enregistrés');
+  };
+  $('#exp').onclick = () => {
+    data.lastExport = Date.now(); save();
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `acquereurs-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    renderReglages();
+  };
+  $('#imp').onchange = async e => {
+    const file = e.target.files[0]; if (!file) return;
+    try {
+      const d = JSON.parse(await file.text());
+      if (!Array.isArray(d.acquereurs) || !Array.isArray(d.modeles)) throw 0;
+      if (!confirm(`Remplacer les données de cet appareil par ce fichier (${d.acquereurs.length} acquéreurs) ?`)) return;
+      data = Object.assign(defaults(), d);
+      ui.selected.clear(); ui.sent.clear(); ui.draftFor = null;
+      save(); toast('Données importées'); renderReglages();
+    } catch (err) { toast('Fichier de sauvegarde invalide'); }
+  };
+  $('#wipe').onclick = () => {
+    if (!confirm('Tout effacer ? Pensez à exporter une sauvegarde avant.')) return;
+    if (!confirm('Vraiment tout effacer ? Action définitive.')) return;
+    data = defaults(); ui.selected.clear(); ui.sent.clear(); ui.draftFor = null;
+    save(); toast('Données effacées'); renderReglages();
+  };
+}
+
+/* ---------- Routeur ---------- */
+function route() {
+  const h = location.hash.replace(/^#\/?/, '');
+  const [page, id] = h.split('/');
+  const nav = { '': 'list', a: 'list', envoi: 'list', modeles: 'modeles', m: 'modeles', reglages: 'reglages' }[page] || 'list';
+  document.querySelectorAll('[data-nav]').forEach(a => a.classList.toggle('on', a.dataset.nav === nav));
+  if (page === 'a' && id) renderFiche(id);
+  else if (page === 'modeles') renderModeles();
+  else if (page === 'm' && id) renderModele(id);
+  else if (page === 'envoi') renderEnvoi();
+  else if (page === 'reglages') renderReglages();
+  else renderList();
+  window.scrollTo(0, 0);
+}
+window.addEventListener('hashchange', route);
+route();
+
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
