@@ -1,4 +1,4 @@
-# Carnet Acquéreurs
+# Carnet
 
 Petite app pour suivre ses acquéreurs et leur envoyer des messages types (SMS, WhatsApp, email).
 Aucun serveur : les données restent dans le navigateur de l'appareil.

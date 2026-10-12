@@ -1,6 +1,6 @@
 // Réseau d'abord, cache en secours : l'app marche hors connexion
 // et récupère toujours la dernière version quand il y a du réseau.
-const CACHE = 'carnet-acquereurs-v1';
+const CACHE = 'carnet-v2';
 const FILES = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', e => {
