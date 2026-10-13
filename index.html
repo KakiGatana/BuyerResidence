@@ -242,8 +242,11 @@ small{color:var(--muted);font-weight:400}
 
 /* ---------- Messages ---------- */
 .howto{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px}
-.howto li{display:flex;gap:12px;align-items:flex-start;font-size:15px}
-.howto li b{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--cs);color:var(--c);flex:none;font-size:14px}
+.howto li{display:flex;gap:12px;align-items:flex-start;min-width:0}
+.howto .num{display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--c);color:var(--on-c);flex:none;font-size:14px;font-weight:800}
+.howto .txt{flex:1;min-width:0;padding-top:4px}
+.howto strong{display:block;font-size:15.5px;margin-bottom:2px}
+.howto p{margin:0;font-size:14.5px;color:var(--muted);line-height:1.45}
 .big{display:flex;flex-direction:column;gap:10px;margin-bottom:14px}
 .bigbtn{display:flex;align-items:center;gap:14px;padding:14px 16px;background:var(--surface);border:1.5px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);text-decoration:none;color:var(--text)}
 .bigbtn .ptile{width:42px;height:42px;border-radius:13px;box-shadow:none}
@@ -1018,12 +1021,12 @@ function renderMessages() {
     <div class="card">
       <div class="card-h">Comment ça marche</div>
       <ol class="howto">
-        <li><b>1</b><span>Choisissez <b>à qui</b> écrire ci-dessous, puis cochez les personnes dans la liste.</span></li>
-        <li><b>2</b><span>Appuyez sur <b>Écrire un message</b> et choisissez un modèle.</span></li>
-        <li><b>3</b><span>Appuyez sur <b>SMS</b>, <b>WhatsApp</b> ou <b>Email</b> pour chaque personne : le message est déjà écrit.</span></li>
+        <li><span class="num">1</span><div class="txt"><strong>Choisissez à qui écrire</strong><p>Appuyez sur un des boutons juste en dessous, puis cochez les personnes dans la liste.</p></div></li>
+        <li><span class="num">2</span><div class="txt"><strong>Choisissez le message</strong><p>Appuyez sur « Écrire un message » en bas de l’écran, puis sur un modèle.</p></div></li>
+        <li><span class="num">3</span><div class="txt"><strong>Envoyez</strong><p>Pour chaque personne, appuyez sur SMS, WhatsApp ou Email. Le message est déjà écrit, il ne reste qu’à l’envoyer.</p></div></li>
       </ol>
     </div>
-    <h2 class="sec-t">Écrire…</h2>
+    <h2 class="sec-t">À qui écrire ?</h2>
     <div class="big">${who.map(([c, t, s]) => `<a class="bigbtn" href="#/l/${c}" data-pick="${c}" style="--c:var(--${c});--cs:var(--${c}-s)"><div class="ptile">${ico(SEC[c].icon)}</div><div class="t"><strong>${t}</strong><small>${s}</small></div>${ico('chev', 'chev')}</a>`).join('')}</div>
     <h2 class="sec-t">Mes modèles</h2>
     <p class="sub" style="margin:-4px 0 12px">Les mots entre accolades sont remplacés automatiquement : {prenom} par le prénom, {bien} par la description du bien, {signature} par votre signature.</p>
