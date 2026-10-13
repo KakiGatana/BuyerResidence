@@ -368,7 +368,7 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const app = $('#app');
 const KEY = 'carnet-acquereurs-v1';
-const APP_VERSION = '11'; // À changer à chaque mise en ligne, avec version.json
+const APP_VERSION = '12'; // À changer à chaque mise en ligne, avec version.json
 const DAY = 86400000;
 
 // Serveur de l'agence (Supabase). La clé « publishable » est faite pour être publique :
@@ -455,11 +455,18 @@ const SOURCES = ['Leboncoin', 'SeLoger', 'PAP', "Bien'ici", 'Panneau', 'Autre'];
 const MANDATS = ['Simple', 'Exclusif', 'Semi-exclusif'];
 const DPE = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
 const OLD_TYPES = { Studio: 1, T2: 2, T3: 3, T4: 4, 'T5+': 5 };
-const QUARTIERS = ['Vélizy-Bas (Village)', 'Mozart', 'Europe', 'Louvois', 'Le Clos', 'Les Aviateurs', 'Pointe Ouest', 'Vélizy-Haut', 'Viroflay', 'Chaville', 'Jouy-en-Josas', 'Bièvres', 'Meudon'];
+// Secteurs et résidences de Vélizy tels que dans ACTION, puis les communes voisines
+const QUARTIERS = ['Gare', 'Le Clos', 'Les Aviateurs', 'Le Mail', 'Louvois', 'Mairie', 'Mozart', 'Vélizy bas', 'Zone d’activité', 'Fronval', 'Exelmans',
+  'Viroflay', 'Chaville', 'Jouy-en-Josas', 'Bièvres', 'Meudon'];
+const RESIDENCES = ['Villa Azur', 'Parsifal', 'Meudon Velizy', 'L’Ursine', 'Les Ailes', 'Leclerc', 'Exelmans', 'La Ferme', 'Vélizy Village', 'Le Parc',
+  'Les Tilleuls', 'Les Etangs', 'Dauphiné', 'Europe', 'Happy Vélizy', 'Harmonia', 'Vieille Eglise', 'Les Bois', 'Roussillon', 'Alizé', 'La Foret', 'Galilée', 'Mermoz'];
+// Anciens noms de quartiers (avant la liste ACTION) → nouveaux noms
+const OLD_QUARTIERS = { 'Vélizy-Bas (Village)': 'Vélizy bas' };
 // Où en est un acquéreur avec un bien donné
 const ETAPES = [{ k: 'demande', l: 'A demandé', c: 'blue' }, { k: 'propose', l: 'Proposé', c: 'grey' }, { k: 'visite', l: 'Visité', c: 'violet' },
   { k: 'offre', l: 'Offre', c: 'amber' }, { k: 'achat', l: 'A acheté', c: 'green' }, { k: 'non', l: 'Pas intéressé', c: 'grey' }];
 const quartiers = () => data.quartiers;
+const residences = () => data.residences;
 
 // Pôle location
 const TYPES_LOC = ['Appartement', 'Maison', 'Studio', 'Chambre', 'Parking'];
@@ -498,7 +505,7 @@ const defaultTemplates = pole => Object.entries(pole === 'location' ? TPL_LOC : 
 function defaults() {
   return {
     version: 3, theme: 'light', signature: '', lastExport: 0,
-    quartiers: [...QUARTIERS],
+    quartiers: [...QUARTIERS], residences: [...RESIDENCES],
     acquereurs: [], vendeurs: [], biens: [], pige: [], lcand: [], lbiens: [],
     modeles: Object.values(TPL).map(t => ({ id: uid(), ...t }))
   };
@@ -520,6 +527,17 @@ function migrate(d) {
     d.version = 2;
   }
   for (const b of d.biens) b.nom ??= '';
+  if (!Array.isArray(d.residences)) d.residences = [...RESIDENCES];
+  // Ancienne liste de quartiers devinée → secteurs officiels (en gardant ceux ajoutés à la main)
+  if (d.quartiers.includes('Vélizy-Bas (Village)')) {
+    const vieux = ['Vélizy-Bas (Village)', 'Mozart', 'Europe', 'Louvois', 'Le Clos', 'Les Aviateurs', 'Pointe Ouest', 'Vélizy-Haut', 'Viroflay', 'Chaville', 'Jouy-en-Josas', 'Bièvres', 'Meudon'];
+    d.quartiers = [...QUARTIERS, ...d.quartiers.filter(q => !vieux.includes(q) && !QUARTIERS.includes(q))];
+  }
+  const ren = q => OLD_QUARTIERS[q] || q;
+  for (const k of Object.keys(KINDS)) for (const it of d[k] || []) {
+    if (Array.isArray(it.quartiers) && it.quartiers.some(q => q in OLD_QUARTIERS)) it.quartiers = [...new Set(it.quartiers.map(ren))];
+    if (it.quartier in OLD_QUARTIERS) it.quartier = ren(it.quartier);
+  }
   if (d.version < 3) {
     // Quartier des Aviateurs et communes voisines (vus dans le carnet papier)
     for (const q of QUARTIERS) if (!d.quartiers.includes(q)) d.quartiers.push(q);
@@ -574,7 +592,7 @@ function lbienDesc(b) {
   let s = `${b.type || 'Logement'}${b.pieces ? ` de ${b.pieces} pièce${b.pieces > 1 ? 's' : ''}` : ''}`;
   if (b.surface) s += `, ${b.surface} m²`;
   if (b.meuble) s += `, ${b.meuble.toLowerCase()}`;
-  if (b.quartier) s += ` – ${b.quartier}`;
+  if (b.residence || b.quartier) s += ` – ${[b.residence && `résidence ${b.residence}`, b.quartier].filter(Boolean).join(', ')}`;
   if (b.loyer) s += `, ${fmtEur(b.loyer)} charges comprises`;
   if (b.dispo) s += `, disponible le ${fmtDay(b.dispo)}`;
   return s;
@@ -600,7 +618,7 @@ function bienDesc(b) {
   if (b.chambres) parts.push(`${b.chambres} chambre${b.chambres > 1 ? 's' : ''}`);
   if (b.surface) parts.push(`${b.surface} m²`);
   let s = parts.join(', ');
-  if (b.quartier) s += ` – ${b.quartier}`;
+  if (b.residence || b.quartier) s += ` – ${[b.residence && `résidence ${b.residence}`, b.quartier].filter(Boolean).join(', ')}`;
   if (b.prix) s += `, ${fmtK(b.prix)}`;
   if (b.dpe) s += ` (DPE ${b.dpe})`;
   return s;
@@ -626,7 +644,7 @@ const SEC = {
       { t: 'Contact', f: [F('prenom', 'Prénom', 'text', { half: 1 }), F('nom', 'Nom', 'text', { half: 1 }), F('tel', 'Téléphone', 'tel'), F('email', 'Email', 'email')] },
       { t: 'Ce qu’il recherche', f: [F('budget', 'Budget max', 'number', { unit: 'k€', half: 1 }), F('surface', 'Surface min', 'number', { unit: 'm²', half: 1 }),
         F('piecesMin', 'Pièces min', 'num', { max: 5, any: 'Peu importe', half: 1 }), F('chambresMin', 'Chambres min', 'num', { max: 4, any: 'Peu importe', half: 1 }),
-        F('types', 'Type de bien', 'multi', { opts: TYPES }), F('quartiers', 'Quartiers', 'multi', { opts: quartiers, hint: 'aucun coché = tout Vélizy' }),
+        F('types', 'Type de bien', 'multi', { opts: TYPES }), F('quartiers', 'Secteurs', 'multi', { opts: quartiers, hint: 'aucun coché = tout Vélizy' }),
         F('criteres', 'Critères', 'multi', { opts: CRITERES }), F('autres', 'Autres critères', 'text', { ph: 'Proche école, dernier étage…' })] },
       { t: 'Situation', f: [F('profil', 'Profil', 'multi', { opts: PROFILS }), F('financement', 'Financement', 'text', { ph: 'Accord de prêt, apport…' }), F('provenance', 'Provenance', 'select', { opts: PROVENANCES })] },
       { t: 'Suivi', f: [F('statut', 'Statut', 'single', { req: 1 }), F('rdv', 'Prochain rendez-vous ou visite', 'datetime')] }
@@ -647,14 +665,14 @@ const SEC = {
     valid: v => v.prenom || v.nom || v.adresse,
     sections: () => [
       { t: 'Contact', f: [F('prenom', 'Prénom', 'text', { half: 1 }), F('nom', 'Nom', 'text', { half: 1 }), F('tel', 'Téléphone', 'tel'), F('email', 'Email', 'email')] },
-      { t: 'Son bien', f: [F('adresse', 'Adresse', 'text', { ph: 'N°, rue' }), F('quartier', 'Quartier', 'select', { opts: quartiers, half: 1 }), F('typeBien', 'Type', 'select', { opts: TYPES, half: 1 }),
+      { t: 'Son bien', f: [F('adresse', 'Adresse', 'text', { ph: 'N°, rue' }), F('quartier', 'Secteur', 'select', { opts: quartiers, half: 1 }), F('residence', 'Résidence', 'select', { opts: residences, half: 1 }), F('typeBien', 'Type', 'select', { opts: TYPES, half: 1 }),
         F('pieces', 'Pièces', 'num', { max: 6, half: 1 }), F('surface', 'Surface', 'number', { unit: 'm²', half: 1 }), F('estimation', 'Estimation', 'number', { unit: 'k€', half: 1 })] },
       { t: 'Prospection', f: [F('origine', 'Origine', 'select', { opts: ORIGINES, half: 1 }), F('relance', 'Date de relance', 'date', { half: 1 }), F('stopPub', 'Stop pub (ne pas démarcher)', 'check')] },
       { t: 'Statut', f: [F('statut', '', 'single', { req: 1 })] }
     ],
     row: v => ({
       tags: [v.typeBien && tag(v.typeBien), v.pieces && tag(`${v.pieces} p.`), v.estimation && tag(`≈ ${fmtK(v.estimation)}`, 'b'), v.stopPub && tag('Stop pub', 'g')],
-      meta: joinMeta(esc(v.adresse || v.quartier), relanceMeta('vend', v) || (v.origine && esc(v.origine))),
+      meta: joinMeta(esc(v.adresse || v.residence || v.quartier), relanceMeta('vend', v) || (v.origine && esc(v.origine))),
       pill: true
     })
   },
@@ -665,7 +683,7 @@ const SEC = {
     name: bienName,
     valid: b => b.nom || b.type || b.adresse || b.numero,
     sections: () => [
-      { t: 'Le bien', f: [F('nom', 'Nom du dossier', 'text', { ph: 'Ex. nom du vendeur : Tordif, Charlet…' }), F('type', 'Type', 'single', { opts: TYPES }), F('adresse', 'Adresse', 'text', { ph: 'N°, rue' }), F('quartier', 'Quartier', 'select', { opts: quartiers }),
+      { t: 'Le bien', f: [F('nom', 'Nom du dossier', 'text', { ph: 'Ex. nom du vendeur : Tordif, Charlet…' }), F('type', 'Type', 'single', { opts: TYPES }), F('adresse', 'Adresse', 'text', { ph: 'N°, rue' }), F('quartier', 'Secteur', 'select', { opts: quartiers, half: 1 }), F('residence', 'Résidence', 'select', { opts: residences, half: 1 }),
         F('pieces', 'Pièces', 'num', { max: 7, half: 1 }), F('chambres', 'Chambres', 'num', { max: 6, half: 1 }), F('surface', 'Surface habitable', 'number', { unit: 'm²', half: 1 }),
         F('terrain', 'Terrain', 'number', { unit: 'm²', half: 1 }), F('prix', 'Prix', 'number', { unit: 'k€', half: 1 }), F('dpe', 'DPE', 'select', { opts: DPE, half: 1 })] },
       { t: 'Mandat', f: [F('numero', 'N° de mandat', 'text', { half: 1 }), F('typeMandat', 'Type de mandat', 'select', { opts: MANDATS, half: 1 }),
@@ -677,7 +695,7 @@ const SEC = {
       const n = b.statut === 'vente' ? matches(b).length : 0;
       return {
         tags: [b.prix && tag(fmtK(b.prix), 'b'), b.typeMandat && tag(b.typeMandat, b.typeMandat === 'Exclusif' ? 'v' : ''), b.dpe && tag(`DPE ${b.dpe}`), n && tag(plural(n, 'acquéreur', 'acquéreurs'), 'ok')],
-        meta: joinMeta(esc(b.adresse || b.quartier), b.numero && `N° ${esc(b.numero)}`),
+        meta: joinMeta(esc(b.adresse || b.residence || b.quartier), b.numero && `N° ${esc(b.numero)}`),
         pill: true
       };
     }
@@ -712,7 +730,7 @@ const SEC = {
       { t: 'Ce qu’il recherche', f: [F('loyerMax', 'Loyer max charges comprises', 'number', { unit: '€', half: 1 }), F('entree', 'Entrée souhaitée', 'date', { half: 1 }),
         F('piecesMin', 'Pièces min', 'num', { max: 5, any: 'Peu importe', half: 1 }), F('surface', 'Surface min', 'number', { unit: 'm²', half: 1 }),
         F('types', 'Type de logement', 'multi', { opts: TYPES_LOC }), F('meuble', 'Meublé ?', 'single', { opts: MEUBLE_PREF }),
-        F('quartiers', 'Quartiers', 'multi', { opts: quartiers, hint: 'aucun coché = tout Vélizy' }), F('criteres', 'Critères', 'multi', { opts: CRITERES }),
+        F('quartiers', 'Secteurs', 'multi', { opts: quartiers, hint: 'aucun coché = tout Vélizy' }), F('criteres', 'Critères', 'multi', { opts: CRITERES }),
         F('autres', 'Autres critères', 'text', { ph: 'Animaux, proche RER…' })] },
       { t: 'Dossier', f: [F('situation', 'Situation', 'select', { opts: SITUATIONS, half: 1 }), F('revenus', 'Revenus nets / mois', 'number', { unit: '€', half: 1 }),
         F('garant', 'Garant', 'select', { opts: GARANTS, half: 1 }), F('occupants', 'Occupants', 'num', { max: 6, half: 1 }),
@@ -737,7 +755,7 @@ const SEC = {
     valid: b => b.nom || b.type || b.adresse,
     sections: () => [
       { t: 'Le logement', f: [F('nom', 'Nom du dossier', 'text', { ph: 'Ex. nom du propriétaire' }), F('type', 'Type', 'single', { opts: TYPES_LOC }),
-        F('adresse', 'Adresse', 'text', { ph: 'N°, rue, étage' }), F('quartier', 'Quartier', 'select', { opts: quartiers }),
+        F('adresse', 'Adresse', 'text', { ph: 'N°, rue, étage' }), F('quartier', 'Secteur', 'select', { opts: quartiers, half: 1 }), F('residence', 'Résidence', 'select', { opts: residences, half: 1 }),
         F('pieces', 'Pièces', 'num', { max: 6, half: 1 }), F('surface', 'Surface', 'number', { unit: 'm²', half: 1 }),
         F('meuble', 'Meublé ?', 'single', { opts: MEUBLE }), F('dispo', 'Disponible le', 'date', { half: 1 }), F('dpe', 'DPE', 'select', { opts: DPE, half: 1 })] },
       { t: 'Loyer', f: [F('loyer', 'Loyer charges comprises', 'number', { unit: '€', half: 1 }), F('charges', 'Dont charges', 'number', { unit: '€', half: 1 }),
@@ -750,7 +768,7 @@ const SEC = {
       const n = ['dispo', 'visites'].includes(b.statut) ? matchesLoc(b).length : 0;
       return {
         tags: [b.loyer && tag(`${fmtEur(b.loyer)} CC`, 'b'), b.meuble && tag(b.meuble), b.surface && tag(`${b.surface} m²`), n && tag(plural(n, 'candidat', 'candidats'), 'ok')],
-        meta: joinMeta(esc(b.adresse || b.quartier), b.dispo && `dispo le ${fmtDay(b.dispo)}`),
+        meta: joinMeta(esc(b.adresse || b.residence || b.quartier), b.dispo && `dispo le ${fmtDay(b.dispo)}`),
         pill: true
       };
     }
@@ -860,7 +878,7 @@ function renderList(col) {
     <div class="panel">
       <div class="search">${ico('search')}<input type="search" id="q" placeholder="Rechercher : ${S.searchPh}" value="${esc(f.q)}" aria-label="Rechercher"></div>
       ${col === 'acq' ? `<div class="filters">
-        <select id="fq" aria-label="Quartier"><option value="">Tous quartiers</option>${data.quartiers.map(q => `<option ${f.fq === q ? 'selected' : ''}>${esc(q)}</option>`).join('')}</select>
+        <select id="fq" aria-label="Quartier"><option value="">Tous secteurs</option>${data.quartiers.map(q => `<option ${f.fq === q ? 'selected' : ''}>${esc(q)}</option>`).join('')}</select>
         <select id="ft" aria-label="Type de bien"><option value="">Tous types</option>${TYPES.map(t => `<option ${f.ft === t ? 'selected' : ''}>${t}</option>`).join('')}</select>
         <input id="fb" type="number" inputmode="numeric" min="0" step="5" placeholder="Prix du bien (k€)" value="${esc(f.fb)}" aria-label="Prix du bien en k€ : affiche les acquéreurs dont le budget suffit">
         <select id="fp" aria-label="Pièces du bien"><option value="">Pièces du bien</option>${[1, 2, 3, 4, 5].map(n => `<option value="${n}" ${f.fp == n ? 'selected' : ''}>${n}${n === 5 ? '+' : ''} pièce${n > 1 ? 's' : ''}</option>`).join('')}</select>
@@ -1405,9 +1423,13 @@ function renderReglages() {
       <p class="sub">Ajoutée à la fin des messages, à la place de {signature}.</p>
       <textarea id="sig" rows="3" placeholder="Prénom Nom&#10;Agence&#10;06 …">${esc(data.signature)}</textarea>
     </div>
-    <div class="card"><div class="card-h">Quartiers</div>
-      <p class="sub">Un quartier par ligne.</p>
+    <div class="card"><div class="card-h">Secteurs</div>
+      <p class="sub">Un secteur par ligne.</p>
       <textarea id="qs" rows="7">${esc(data.quartiers.join('\n'))}</textarea>
+    </div>
+    <div class="card"><div class="card-h">Résidences</div>
+      <p class="sub">Une résidence par ligne.</p>
+      <textarea id="rs" rows="7">${esc(data.residences.join('\n'))}</textarea>
     </div>
     <div class="savebar" style="position:static;background:none"><button class="btn primary" id="saveSet">Enregistrer</button></div>
     <div class="card"><div class="card-h">Sauvegarde</div>
@@ -1431,6 +1453,7 @@ function renderReglages() {
   $('#saveSet').onclick = () => {
     data.signature = $('#sig').value.trim();
     data.quartiers = [...new Set($('#qs').value.split('\n').map(s => s.trim()).filter(Boolean))];
+    data.residences = [...new Set($('#rs').value.split('\n').map(s => s.trim()).filter(Boolean))];
     save(); toast('Réglages enregistrés ✓');
   };
   $('#exp').onclick = () => {
@@ -1535,18 +1558,20 @@ function replaceInPlace(target, src) {
   Object.assign(target, src);
 }
 
+const reglagesOf = d => ({ quartiers: d.quartiers, residences: d.residences });
 // Construit les listes du pôle affiché à partir des lignes connues (mêmes objets : un formulaire ouvert reste lié à sa fiche)
 function buildData() {
   const pole = ui.pole;
   const d = { ...defaults(), theme: data.theme, signature: Srv.me?.signature || '', modeles: [] };
   for (const r of Srv.store.values()) {
     if (r.deleted || r.pole !== pole) continue;
-    if (r.kind === 'reglages') { if (Array.isArray(r.data?.quartiers)) d.quartiers = r.data.quartiers; continue; }
+    if (r.kind === 'reglages') { if (Array.isArray(r.data?.quartiers)) d.quartiers = r.data.quartiers; if (Array.isArray(r.data?.residences)) d.residences = r.data.residences; continue; }
     const key = KEY_OF_KIND[r.kind]; if (key) d[key].push(r.data);
   }
   migrate(d);
   for (const r of Srv.store.values()) if (r.pole === pole && !r.deleted && r.kind !== 'reglages') Srv.snap.set(r.id, JSON.stringify(r.data));
-  if (Srv.store.has(`reglages-${pole}`)) Srv.snap.set(`reglages-${pole}`, JSON.stringify({ quartiers: d.quartiers }));
+  // Réglages : on garde la version stockée telle quelle, pour renvoyer une liste mise à jour (ex. secteurs officiels)
+  if (Srv.store.has(`reglages-${pole}`)) Srv.snap.set(`reglages-${pole}`, JSON.stringify(Srv.store.get(`reglages-${pole}`).data));
   return d;
 }
 // Premier passage d'un pôle sur le serveur : on crée les modèles de messages
@@ -1569,7 +1594,7 @@ Srv.save = function () {
     queue(r);
   };
   for (const [key, kind] of Object.entries(KINDS)) for (const it of data[key] || []) put(it.id, kind, it);
-  put(`reglages-${pole}`, 'reglages', { quartiers: data.quartiers });
+  put(`reglages-${pole}`, 'reglages', reglagesOf(data));
   // Fiche retirée d'une liste = supprimée (suppression « douce » : un responsable peut la retrouver en base)
   for (const r of Srv.store.values()) {
     if (r.pole !== pole || r.deleted || seen.has(r.id) || !KNOWN_KINDS.has(r.kind)) continue;
@@ -1795,7 +1820,8 @@ async function startSession(user) {
   try {
     await Promise.all([pull(true), loadTeam()]);
     Srv.loaded = true;
-    data = buildData(); ensureDefaults(); persist();
+    // save() n’envoie que ce qui a changé : ici, surtout les réglages mis à jour (secteurs officiels…)
+    data = buildData(); ensureDefaults(); save();
     route(true);
     setSync(Srv.outbox.length ? 'wait' : 'ok');
   } catch (e) { setSync('off'); }
@@ -1808,7 +1834,7 @@ function renderPoleSwitch() {
   el.onclick = e => {
     const b = e.target.closest('[data-pole]'); if (!b || b.dataset.pole === ui.pole) return;
     ui.pole = b.dataset.pole; lsSet('carnet-pole', ui.pole);
-    resetUi(); data = buildData(); if (Srv.loaded) ensureDefaults();
+    resetUi(); data = buildData(); if (Srv.loaded) { ensureDefaults(); save(); }
     renderPoleSwitch();
     location.hash = `#/l/${POLE_COLS[ui.pole][0]}`;
   };
@@ -1855,9 +1881,13 @@ function renderReglagesServer() {
       <p class="sub">Ajoutée à la fin de vos messages, à la place de {signature}. Chaque agent a la sienne.</p>
       <textarea id="sig" rows="3" placeholder="Prénom Nom&#10;Agence&#10;06 …">${esc(data.signature)}</textarea>
     </div>
-    <div class="card"><div class="card-h">Quartiers</div>
-      <p class="sub">Un quartier par ligne. Commun à tout le pôle ${POLES[ui.pole]}.</p>
+    <div class="card"><div class="card-h">Secteurs</div>
+      <p class="sub">Un secteur par ligne. Commun à tout le pôle ${POLES[ui.pole]}.</p>
       <textarea id="qs" rows="7">${esc(data.quartiers.join('\n'))}</textarea>
+    </div>
+    <div class="card"><div class="card-h">Résidences</div>
+      <p class="sub">Une résidence par ligne. Commun à tout le pôle ${POLES[ui.pole]}.</p>
+      <textarea id="rs" rows="7">${esc(data.residences.join('\n'))}</textarea>
     </div>
     <div class="savebar" style="position:static;background:none"><button class="btn primary" id="saveSet">Enregistrer</button></div>
     ${localCount() && ui.pole === 'vente' ? `<div class="card"><div class="card-h">Fiches de l’ancienne version</div>
@@ -1881,6 +1911,7 @@ function renderReglagesServer() {
   const m2 = $('#migr2'); if (m2) m2.onclick = migrateLocal;
   $('#saveSet').onclick = async () => {
     data.quartiers = [...new Set($('#qs').value.split('\n').map(s => s.trim()).filter(Boolean))];
+    data.residences = [...new Set($('#rs').value.split('\n').map(s => s.trim()).filter(Boolean))];
     save();
     const sig = $('#sig').value.trim();
     if (sig !== (me.signature || '')) {
