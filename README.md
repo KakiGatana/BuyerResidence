@@ -1,7 +1,18 @@
 # Carnet
 
-Petite app pour suivre ses acquéreurs et leur envoyer des messages types (SMS, WhatsApp, email).
+Petite app pour l'agent immobilier : acquéreurs, prospects vendeurs, mandats et pige,
+avec envoi de messages types (SMS, WhatsApp, email).
 Aucun serveur : les données restent dans le navigateur de l'appareil.
+
+## Pages
+
+- **Acquéreurs** : ce qu'ils cherchent (budget, type, pièces, quartiers), situation, suivi.
+- **Vendeurs** : prospects vendeurs, estimation, date de relance, « Stop pub ». Bouton « Créer le mandat ».
+- **Mandats** : biens en portefeuille. Chaque fiche liste les acquéreurs qui correspondent
+  et permet de leur présenter le bien en un appui.
+- **Pige** : annonces de particuliers repérées à la main (lien, prix, téléphone), suivi des appels.
+  Bouton « En faire un prospect vendeur ».
+- **Messages** : modèles, et envoi en 3 étapes (destinataires → message → envoi un par un).
 
 ## Fichiers
 
@@ -11,9 +22,8 @@ Aucun serveur : les données restent dans le navigateur de l'appareil.
 
 ## Mise en ligne sur GitHub Pages
 
-1. Créer un dépôt sur GitHub et y déposer ces 4 fichiers.
+1. Déposer ces fichiers dans un dépôt GitHub.
 2. Settings → Pages → Source : « Deploy from a branch », branche `main`, dossier `/ (root)`.
-3. L'app est en ligne après une minute à l'adresse `https://<pseudo>.github.io/<depot>/`.
 
 ## Installer sur le téléphone
 
