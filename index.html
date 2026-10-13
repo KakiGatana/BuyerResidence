@@ -330,6 +330,7 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const app = $('#app');
 const KEY = 'carnet-acquereurs-v1';
+const APP_VERSION = '8'; // À changer à chaque mise en ligne, avec version.json
 const DAY = 86400000;
 
 /* ---------- Icônes ---------- */
@@ -1187,11 +1188,16 @@ function renderReglages() {
         <label class="btn" style="margin:0;color:var(--text);font-size:15px">Importer<input type="file" id="imp" accept="application/json,.json" hidden></label>
       </div>
     </div>
+    <div class="card"><div class="card-h">Mises à jour</div>
+      <p class="sub">Version ${APP_VERSION}. Carnet se met à jour tout seul à l’ouverture.</p>
+      <button class="btn" id="maj">Vérifier maintenant</button>
+    </div>
     <div class="card"><div class="card-h">Tout effacer</div>
       <p class="sub">Supprime toutes les fiches et modèles de cet appareil.</p>
       <button class="btn danger" id="wipe">Tout effacer</button>
     </div>`;
   $('#theme').onchange = e => { data.theme = e.target.value; save(); applyTheme(); };
+  $('#maj').onclick = () => checkUpdate(true);
   $('#saveSet').onclick = () => {
     data.signature = $('#sig').value.trim();
     data.quartiers = [...new Set($('#qs').value.split('\n').map(s => s.trim()).filter(Boolean))];
@@ -1268,7 +1274,28 @@ window.addEventListener('hashchange', route);
 route();
 
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
-if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+/* ---------- Mises à jour ---------- */
+let swReg = null;
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => { swReg = r; }).catch(() => {});
+}
+// Compare la version en ligne à celle affichée ; recharge une fois si elle a changé.
+// Vérifié à l'ouverture et à chaque retour sur l'app (sur iPhone, l'app reprend sans se recharger).
+async function checkUpdate(manual) {
+  try {
+    const res = await fetch(`version.json?t=${Date.now()}`, { cache: 'no-store' });
+    const { v } = await res.json();
+    if (v === APP_VERSION) { if (manual) toast('Carnet est à jour ✓'); return; }
+    let tried = null; try { tried = sessionStorage.getItem('carnet-maj'); } catch (e) {}
+    if (tried === v && !manual) return; // déjà essayé : on ne boucle pas
+    try { sessionStorage.setItem('carnet-maj', v); } catch (e) {}
+    if (swReg) await swReg.update().catch(() => {});
+    toast('Mise à jour de Carnet…');
+    setTimeout(() => location.reload(), 600);
+  } catch (e) { if (manual) toast('Pas de connexion : réessayez plus tard'); }
+}
+checkUpdate();
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkUpdate(); });
 </script>
 </body>
 </html>

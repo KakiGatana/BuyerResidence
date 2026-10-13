@@ -1,6 +1,6 @@
 // Réseau d'abord, cache en secours : l'app marche hors connexion
 // et récupère toujours la dernière version quand il y a du réseau.
-const CACHE = 'carnet-v7';
+const CACHE = 'carnet-v8';
 const FILES = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', e => {
@@ -15,9 +15,12 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   const req = e.request;
-  if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
+  const url = new URL(req.url);
+  if (req.method !== 'GET' || url.origin !== location.origin) return;
+  // Le numéro de version ne doit jamais venir d'un cache
+  if (url.pathname.endsWith('/version.json')) { e.respondWith(fetch(req, { cache: 'no-store' })); return; }
   e.respondWith(
-    fetch(req, { cache: 'no-cache' })
+    fetch(req, { cache: 'no-store' })
       .then(res => {
         const copy = res.clone();
         caches.open(CACHE).then(c => c.put(req, copy));
