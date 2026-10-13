@@ -1754,7 +1754,12 @@ function renderWait(kind) {
     <div class="phead"><div class="ptile">${ico('users')}</div><div class="t"><h1>${T[kind]}</h1><p class="sub">${esc(Srv.me?.email || '')}</p></div></div>
     <div class="card"><p style="margin:0 0 14px">${P[kind]}</p>
       <div class="btnrow"><button class="btn primary" id="retry">Réessayer</button>${kind !== 'offline' || Srv.me ? '<button class="btn" id="out">Se déconnecter</button>' : ''}</div></div></div>`;
-  $('#retry').onclick = () => boot();
+  $('#retry').onclick = async e => {
+    e.target.disabled = true; e.target.textContent = 'Vérification…';
+    await boot();
+    // Toujours le même écran : on le dit, sinon on croit que le bouton ne fait rien
+    if ($('#retry')) toast(kind === 'pending' && Srv.me && !Srv.me.pole ? 'Toujours en attente : aucun pôle attribué à ce compte pour l’instant' : 'Toujours impossible pour le moment');
+  };
   const out = $('#out'); if (out) out.onclick = logout;
 }
 async function startSession(user) {
