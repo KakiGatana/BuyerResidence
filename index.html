@@ -1900,6 +1900,7 @@ function renderReglagesServer() {
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
+  const inv = $('#invite'); if (inv) inv.onclick = inviteAgent;
   const team = $('#team');
   if (team) team.onchange = async e => {
     const li = e.target.closest('[data-id]'), k = e.target.dataset.k; if (!li || !k) return;
@@ -1924,7 +1925,22 @@ function teamHTML() {
         <select data-k="pole" aria-label="Pôle"><option value="">À activer</option>${Object.entries(POLES).map(([k, l]) => `<option value="${k}" ${p.pole === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
         <select data-k="role" aria-label="Rôle"><option value="agent" ${p.role === 'agent' ? 'selected' : ''}>Agent</option><option value="responsable" ${p.role === 'responsable' ? 'selected' : ''}>Responsable</option></select>
         <label class="checkf"><input type="checkbox" data-k="actif" ${p.actif ? 'checked' : ''}>Actif</label>
-      </div></li>`).join('')}</ul></div>`;
+      </div></li>`).join('')}</ul>
+    <button class="btn primary block" id="invite" style="margin-top:14px">${ico('send')}Inviter un agent</button>
+    <p class="sub" style="margin:8px 0 0;text-align:center">Envoie le lien de l’app et la marche à suivre par SMS, WhatsApp ou email.</p></div>`;
+}
+// Adresse publique de l'app (le lien envoyé aux agents, même si on teste en local)
+const PUBLIC_URL = 'https://kakigatana.github.io/BuyerResidence/';
+async function inviteAgent() {
+  const text = `Bonjour ! Voici Carnet, l'app de l'agence pour nos acquéreurs, vendeurs et mandats : ${PUBLIC_URL}\n\n`
+    + `1. Ouvre ce lien sur ton téléphone et appuie sur « Créer un compte ».\n`
+    + `2. Ajoute-la à ton écran d'accueil :\n   - iPhone (Safari) : bouton Partager, puis « Sur l'écran d'accueil »\n   - Android (Chrome) : menu ⋮, puis « Installer l'application »\n`
+    + `3. Préviens-moi : j'active ton compte et tu as accès aux fiches.\n\n${Srv.me?.nom || ''}`;
+  try {
+    if (navigator.share) { await navigator.share({ title: 'Carnet', text }); return; }
+  } catch (e) { if (e && e.name === 'AbortError') return; }
+  try { await navigator.clipboard.writeText(text); toast('Invitation copiée : collez-la dans un SMS ou un email'); }
+  catch (e) { prompt('Copiez cette invitation :', text); }
 }
 
 /* ---------- Routeur ---------- */
