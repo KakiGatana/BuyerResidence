@@ -26,7 +26,7 @@
   --bg:#ebe6dc; --surface:#fbf9f5; --surface-2:#f1ece2; --field:#f2eee6; --text:#1f2329; --muted:#6c685f;
   --line:#ded6c6; --line-strong:#c4bba8; --ink:#1f3354; --ink-text:#ffffff;
   --acq:#3563b0; --acq-s:#e2e9f6; --vend:#2b7a57; --vend-s:#dcefe5; --bien:#b5532e; --bien-s:#f6e1d6;
-  --pige:#6a4ca3; --pige-s:#ebe3f6; --msg:#a66d14; --msg-s:#f5e8cf; --reg:#4b5565; --reg-s:#e3e6eb;
+  --pige:#6a4ca3; --pige-s:#ebe3f6; --msg:#cf2e38; --msg-s:#fbe2e3; --reg:#4b5565; --reg-s:#e3e6eb;
   --on-c:#ffffff; --ok:#1e7a4c; --ok-s:#dff1e6; --warn:#97600f; --warn-s:#faedd3; --danger:#b42318; --danger-s:#fbe3e0;
   --grey:#6c685f; --grey-s:#e9e5dc;
   --radius:18px; --shadow:0 1px 2px rgba(60,45,20,.05),0 8px 22px rgba(60,45,20,.06);
@@ -38,7 +38,7 @@
     --bg:#131416; --surface:#1d1f22; --surface-2:#272a2e; --field:#25282c; --text:#eceae5; --muted:#a09d96;
     --line:#2f3236; --line-strong:#464a50; --ink:#0d1524; --ink-text:#eceae5;
     --acq:#8aaceb; --acq-s:#1e2a40; --vend:#72c79e; --vend-s:#19302a; --bien:#ec9b7b; --bien-s:#3a241b;
-    --pige:#b99de8; --pige-s:#2b2340; --msg:#e6b566; --msg-s:#372c17; --reg:#a9b3c2; --reg-s:#262a31;
+    --pige:#b99de8; --pige-s:#2b2340; --msg:#f27a80; --msg-s:#3d1c1f; --reg:#a9b3c2; --reg-s:#262a31;
     --on-c:#111317; --ok:#7fd0a3; --ok-s:#1a3227; --warn:#e7ba6c; --warn-s:#392e1b; --danger:#f2897f; --danger-s:#3c1f1d;
     --grey:#a09d96; --grey-s:#2b2d30;
     --shadow:none; --av-l:26%; --av-tl:82%; --av-s:30%;
@@ -48,7 +48,7 @@
   --bg:#131416; --surface:#1d1f22; --surface-2:#272a2e; --field:#25282c; --text:#eceae5; --muted:#a09d96;
   --line:#2f3236; --line-strong:#464a50; --ink:#0d1524; --ink-text:#eceae5;
   --acq:#8aaceb; --acq-s:#1e2a40; --vend:#72c79e; --vend-s:#19302a; --bien:#ec9b7b; --bien-s:#3a241b;
-  --pige:#b99de8; --pige-s:#2b2340; --msg:#e6b566; --msg-s:#372c17; --reg:#a9b3c2; --reg-s:#262a31;
+  --pige:#b99de8; --pige-s:#2b2340; --msg:#f27a80; --msg-s:#3d1c1f; --reg:#a9b3c2; --reg-s:#262a31;
   --on-c:#111317; --ok:#7fd0a3; --ok-s:#1a3227; --warn:#e7ba6c; --warn-s:#392e1b; --danger:#f2897f; --danger-s:#3c1f1d;
   --grey:#a09d96; --grey-s:#2b2d30;
   --shadow:none; --av-l:26%; --av-tl:82%; --av-s:30%;
@@ -72,8 +72,8 @@ a{color:var(--c)}
 .book{position:relative;width:88px;height:114px;perspective:700px;transform-style:preserve-3d;animation:bookIn .45s cubic-bezier(.2,.8,.2,1) both}
 .book .page{position:absolute;inset:0;border-radius:4px 12px 12px 4px;background:#fbf9f5;box-shadow:0 14px 40px rgba(0,0,0,.35);
   background-image:repeating-linear-gradient(to bottom,transparent 0 13px,#e3dccd 13px 14px);background-position:0 26px;background-size:calc(100% - 28px) 100%;background-repeat:no-repeat;background-origin:content-box;padding:0 12px 0 16px}
-.book .cover{position:absolute;inset:0;border-radius:4px 12px 12px 4px;background:#3563b0;transform-origin:left center;animation:coverOpen .8s cubic-bezier(.65,.05,.3,1) .3s forwards;box-shadow:inset 6px 0 0 rgba(0,0,0,.14)}
-.book .cover::after{content:"";position:absolute;top:0;bottom:0;right:16px;width:7px;background:#d9a35b}
+.book .cover{position:absolute;inset:0;border-radius:4px 12px 12px 4px;background:#cf2e38;transform-origin:left center;animation:coverOpen .8s cubic-bezier(.65,.05,.3,1) .3s forwards;box-shadow:inset 6px 0 0 rgba(0,0,0,.14)}
+.book .cover::after{content:"";position:absolute;top:0;bottom:0;right:16px;width:7px;background:#ffffff}
 .splash-title{font-family:var(--serif);font-weight:600;font-size:34px;color:#fff;letter-spacing:-.01em;opacity:0;animation:titleIn .5s ease .55s forwards}
 @keyframes bookIn{from{opacity:0;transform:translateY(10px) scale(.94)}}
 @keyframes coverOpen{to{transform:rotateY(-160deg)}}
@@ -81,7 +81,7 @@ a{color:var(--c)}
 @keyframes splashOut{to{opacity:0;visibility:hidden}}
 
 /* ---------- En-tête & navigation ---------- */
-header{position:sticky;top:0;z-index:6;background:var(--ink);color:var(--ink-text);padding-top:env(safe-area-inset-top);box-shadow:0 2px 12px rgba(0,0,0,.12)}
+header{position:sticky;top:0;z-index:6;background:var(--ink);color:var(--ink-text);padding-top:env(safe-area-inset-top);box-shadow:0 2px 12px rgba(0,0,0,.12);border-bottom:3px solid #cf2e38}
 .wrap{max-width:720px;margin:0 auto;padding:0 16px}
 .hwrap{display:flex;align-items:center;gap:10px;height:56px}
 .brand{display:flex;align-items:center;gap:9px;margin-right:auto;text-decoration:none;color:inherit;font-family:var(--serif);font-weight:600;font-size:22px;letter-spacing:-.01em}
@@ -308,7 +308,7 @@ small{color:var(--muted);font-weight:400}
 <header>
   <div class="wrap hwrap">
     <a class="brand" href="#/l/acq">
-      <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="5" y="3" width="22" height="26" rx="4" fill="#5b86d0"/><rect x="21" y="3" width="2.5" height="26" fill="#d9a35b"/><rect x="5" y="3" width="3" height="26" rx="1.5" fill="#000" opacity=".15"/></svg>
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="5" y="3" width="22" height="26" rx="4" fill="#e0434b"/><rect x="21" y="3" width="2.5" height="26" fill="#ffffff"/><rect x="5" y="3" width="3" height="26" rx="1.5" fill="#000" opacity=".15"/></svg>
       Carnet
     </a>
     <a class="iconbtn" href="#/reglages" id="gear" aria-label="Réglages"></a>
