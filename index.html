@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet">
 <script>
   // Thème appliqué avant l'affichage pour éviter un flash
-  try { var t = (JSON.parse(localStorage.getItem('carnet-acquereurs-v1') || '{}').theme) || 'light';
+  try { var t = localStorage.getItem('carnet-theme') || (JSON.parse(localStorage.getItem('carnet-acquereurs-v1') || '{}').theme) || 'light';
         if (t !== 'auto') document.documentElement.dataset.theme = t; }
   catch (e) { document.documentElement.dataset.theme = 'light'; }
 </script>
@@ -59,6 +59,40 @@ body[data-sec="bien"]{--c:var(--bien);--cs:var(--bien-s)}
 body[data-sec="pige"]{--c:var(--pige);--cs:var(--pige-s)}
 body[data-sec="msg"]{--c:var(--msg);--cs:var(--msg-s)}
 body[data-sec="reg"]{--c:var(--reg);--cs:var(--reg-s)}
+body[data-sec="lcand"]{--c:var(--lcand);--cs:var(--lcand-s)}
+body[data-sec="lbien"]{--c:var(--lbien);--cs:var(--lbien-s)}
+:root{--lcand:#0f7a86;--lcand-s:#d9eff1;--lbien:var(--bien);--lbien-s:var(--bien-s)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--lcand:#6cc9d3;--lcand-s:#163236}}
+:root[data-theme="dark"]{--lcand:#6cc9d3;--lcand-s:#163236}
+
+/* ---------- Connexion & serveur ---------- */
+body.auth .tabbar,body.auth #gear,body.auth #polesw,body.auth #sync{display:none}
+.authbox{max-width:420px;margin:24px auto 0}
+.authbox .card{padding:20px}
+.authbox h1{margin-bottom:6px}
+.authbox label{margin-bottom:14px}
+.authbox .alt{display:flex;justify-content:space-between;gap:10px;margin-top:14px;flex-wrap:wrap}
+.authbox .alt button{background:none;border:0;color:var(--c);font:inherit;font-size:14px;font-weight:600;cursor:pointer;padding:4px 0}
+.err{background:var(--danger-s);color:var(--danger);border-radius:12px;padding:10px 12px;font-size:14px;font-weight:600;margin-bottom:14px}
+.okbox{background:var(--ok-s);color:var(--text);border-radius:12px;padding:12px;font-size:14.5px;margin-bottom:14px}
+#polesw{display:flex;background:rgba(255,255,255,.12);border-radius:11px;padding:3px}
+#polesw button{border:0;background:none;color:inherit;opacity:.75;font:inherit;font-size:13px;font-weight:700;padding:6px 10px;border-radius:8px;cursor:pointer}
+#polesw button.on{background:#fff;color:var(--ink);opacity:1}
+#sync{width:9px;height:9px;border-radius:50%;background:#7fd0a3;flex:none;margin-left:-4px}
+#sync.wait{background:#e7ba6c}
+#sync.off{background:#9aa0a6}
+.team{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.team li{background:var(--surface-2);border-radius:14px;padding:10px 12px}
+.team .who2{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.team .who2 div{min-width:0}
+.team .who2 strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.team .who2 small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.team .ctl{display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:center}
+.team .ctl .checkf{grid-column:1/-1;min-height:30px}
+.team select{min-height:38px;padding:6px 28px 6px 10px;font-size:14px;background-color:var(--surface)}
+.team .checkf{min-height:38px;font-size:14px;margin:0}
+.fchip.mine{border-style:dashed}
+.fchip.mine.on{border-style:solid}
 
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
@@ -318,6 +352,8 @@ small{color:var(--muted);font-weight:400}
       <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="5" y="3" width="22" height="26" rx="4" fill="#e0434b"/><rect x="21" y="3" width="2.5" height="26" fill="#ffffff"/><rect x="5" y="3" width="3" height="26" rx="1.5" fill="#000" opacity=".15"/></svg>
       Carnet
     </a>
+    <span id="sync" hidden title="Synchronisation"></span>
+    <div id="polesw" hidden></div>
     <a class="iconbtn" href="#/reglages" id="gear" aria-label="Réglages"></a>
   </div>
 </header>
@@ -325,14 +361,22 @@ small{color:var(--muted);font-weight:400}
 <div id="actionbar" class="actionbar" hidden></div>
 <nav class="tabbar" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.115.0/dist/umd/supabase.js"></script>
 <script>
 'use strict';
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const app = $('#app');
 const KEY = 'carnet-acquereurs-v1';
-const APP_VERSION = '10'; // À changer à chaque mise en ligne, avec version.json
+const APP_VERSION = '11'; // À changer à chaque mise en ligne, avec version.json
 const DAY = 86400000;
+
+// Serveur de l'agence (Supabase). La clé « publishable » est faite pour être publique :
+// la sécurité repose sur les règles de la base (voir supabase/schema.sql).
+const SUPA_URL = 'https://nyaancupmdxutiicejbw.supabase.co';
+const SUPA_KEY = 'sb_publishable_LoX0o7egRmIaJ4LgRDfoZw_JpBBQV3U';
+const SERVER = !!SUPA_URL;
+const sb = SERVER ? (window.__carnetTestClient || (window.supabase && window.supabase.createClient(SUPA_URL, SUPA_KEY)) || null) : null;
 
 /* ---------- Icônes ---------- */
 const I = {
@@ -415,8 +459,26 @@ const QUARTIERS = ['Vélizy-Bas (Village)', 'Mozart', 'Europe', 'Louvois', 'Le C
 // Où en est un acquéreur avec un bien donné
 const ETAPES = [{ k: 'demande', l: 'A demandé', c: 'blue' }, { k: 'propose', l: 'Proposé', c: 'grey' }, { k: 'visite', l: 'Visité', c: 'violet' },
   { k: 'offre', l: 'Offre', c: 'amber' }, { k: 'achat', l: 'A acheté', c: 'green' }, { k: 'non', l: 'Pas intéressé', c: 'grey' }];
-const etape = k => ETAPES.find(e => e.k === k) || ETAPES[0];
 const quartiers = () => data.quartiers;
+
+// Pôle location
+const TYPES_LOC = ['Appartement', 'Maison', 'Studio', 'Chambre', 'Parking'];
+const MEUBLE = ['Meublé', 'Vide'];
+const MEUBLE_PREF = ['Meublé', 'Vide', 'Indifférent'];
+const SITUATIONS = ['CDI', 'CDD', 'Intérim', 'Fonctionnaire', 'Indépendant', 'Étudiant', 'Retraité', 'Autre'];
+const GARANTS = ['Visale', 'Garant physique', 'Garantie bancaire', 'Aucun'];
+const ETAPES_LOC = [{ k: 'demande', l: 'A demandé', c: 'blue' }, { k: 'propose', l: 'Proposé', c: 'grey' }, { k: 'visite', l: 'Visité', c: 'violet' },
+  { k: 'dossier', l: 'Dossier déposé', c: 'amber' }, { k: 'loue', l: 'A loué', c: 'green' }, { k: 'non', l: 'Pas intéressé', c: 'grey' }];
+
+// Lien personne ↔ bien : acquéreurs ↔ mandats, candidats ↔ biens à louer
+const LINK = { acq: { to: 'bien', etapes: ETAPES }, lcand: { to: 'lbien', etapes: ETAPES_LOC } };
+const BACK = { bien: 'acq', lbien: 'lcand' };
+const etapeOf = (col, k) => (LINK[col]?.etapes || ETAPES).find(e => e.k === k) || ETAPES[0];
+const POLES = { vente: 'Vente', location: 'Location' };
+const POLE_COLS = { vente: ['acq', 'vend', 'bien', 'pige'], location: ['lcand', 'lbien'] };
+// Type de ligne en base pour chaque liste de fiches
+const KINDS = { acquereurs: 'acq', vendeurs: 'vend', biens: 'bien', pige: 'pige', lcand: 'lcand', lbiens: 'lbien', modeles: 'modele' };
+const fmtEur = n => n ? `${Number(n).toLocaleString('fr-FR')} €` : '';
 
 /* ---------- Données ---------- */
 const TPL = {
@@ -426,16 +488,24 @@ const TPL = {
   vendeur: { titre: 'Relance vendeur', texte: "Bonjour {prenom},\n\nJe me permets de revenir vers vous au sujet de votre bien. Avez-vous avancé dans votre projet de vente ? Je reste disponible pour une estimation gratuite.\n\nBien cordialement,\n{signature}" },
   pige: { titre: 'Premier contact pige', texte: "Bonjour,\n\nJ'ai vu votre annonce et je travaille sur le secteur avec plusieurs acquéreurs à la recherche de ce type de bien. Seriez-vous d'accord pour en discuter quelques minutes ?\n\nBien cordialement,\n{signature}" }
 };
+const TPL_LOC = {
+  nouveau: { titre: 'Logement disponible', texte: "Bonjour {prenom},\n\nUn logement qui correspond à votre recherche se libère :\n{bien}\n\nSouhaitez-vous le visiter ? Je vous propose un créneau cette semaine.\n\nBien cordialement,\n{signature}" },
+  dossier: { titre: 'Pièces du dossier', texte: "Bonjour {prenom},\n\nPour constituer votre dossier de location, merci de m'envoyer :\n- une pièce d'identité\n- vos 3 derniers bulletins de salaire\n- votre contrat de travail (ou une attestation employeur)\n- votre dernier avis d'imposition\n- vos 3 dernières quittances de loyer\n- les mêmes pièces pour le garant, ou l'attestation Visale\n\nBien cordialement,\n{signature}" },
+  relance: { titre: 'Relance candidat', texte: "Bonjour {prenom},\n\nVotre recherche de logement est-elle toujours d'actualité ? Vos critères ont-ils évolué ?\n\nBien cordialement,\n{signature}" }
+};
+// Identifiants fixes : deux agents qui ouvrent l'app en même temps ne créent pas de doublons
+const defaultTemplates = pole => Object.entries(pole === 'location' ? TPL_LOC : TPL).map(([k, t]) => ({ id: `tpl-${pole}-${k}`, ...t }));
 function defaults() {
   return {
     version: 3, theme: 'light', signature: '', lastExport: 0,
     quartiers: [...QUARTIERS],
-    acquereurs: [], vendeurs: [], biens: [], pige: [],
+    acquereurs: [], vendeurs: [], biens: [], pige: [], lcand: [], lbiens: [],
     modeles: Object.values(TPL).map(t => ({ id: uid(), ...t }))
   };
 }
 function migrate(d) {
-  for (const k of ['acquereurs', 'vendeurs', 'biens', 'pige']) if (!Array.isArray(d[k])) d[k] = [];
+  for (const k of Object.keys(KINDS)) if (!Array.isArray(d[k])) d[k] = [];
+  for (const c of d.lcand) c.interets ??= [];
   for (const a of d.acquereurs) {
     a.profil ??= []; a.provenance ??= ''; a.chambresMin ??= null; a.interets ??= []; a.rdv ??= '';
     if (a.piecesMin === undefined) {
@@ -464,14 +534,22 @@ function load() {
   } catch (e) {}
   return defaults();
 }
-let data = load();
+function serverEmpty() {
+  let theme = 'light'; try { theme = localStorage.getItem('carnet-theme') || 'light'; } catch (e) {}
+  return { ...defaults(), theme, modeles: [] };
+}
+// En mode serveur, les fiches de l'ancienne version (sur ce téléphone) sont gardées à part pour être envoyées
+let data = SERVER ? serverEmpty() : load();
+const localData = SERVER ? load() : null;
 function save() {
+  if (SERVER) { Srv.save(); return; }
   try { localStorage.setItem(KEY, JSON.stringify(data)); }
   catch (e) { toast("Impossible d'enregistrer sur cet appareil"); }
 }
 function applyTheme() {
   const root = document.documentElement;
   if (data.theme === 'auto') delete root.dataset.theme; else root.dataset.theme = data.theme || 'light';
+  try { localStorage.setItem('carnet-theme', data.theme || 'light'); } catch (e) {}
 }
 applyTheme();
 
@@ -487,8 +565,30 @@ function bienName(b) {
   if (b.nom) return `${b.nom}${b.type ? ` · ${b.type}` : ''}${b.pieces ? ` ${b.pieces} p.` : ''}`;
   return `${b.type || 'Bien'}${b.pieces ? ` ${b.pieces} p.` : ''}${b.surface ? ` · ${b.surface} m²` : ''}`;
 }
-const bienById = id => data.biens.find(b => b.id === id);
-const interesses = b => data.acquereurs.filter(a => a.interets.some(x => x.b === b.id));
+const bienById = id => data.biens.find(b => b.id === id) || data.lbiens.find(b => b.id === id);
+// Les personnes qui ont un lien avec ce bien (acquéreurs pour un mandat, candidats pour un bien à louer)
+const interesses = (b, bcol) => items(BACK[bcol]).filter(a => a.interets.some(x => x.b === b.id));
+const descOf = b => data.lbiens.includes(b) ? lbienDesc(b) : bienDesc(b);
+function lbienDesc(b) {
+  if (b.description) return b.description;
+  let s = `${b.type || 'Logement'}${b.pieces ? ` de ${b.pieces} pièce${b.pieces > 1 ? 's' : ''}` : ''}`;
+  if (b.surface) s += `, ${b.surface} m²`;
+  if (b.meuble) s += `, ${b.meuble.toLowerCase()}`;
+  if (b.quartier) s += ` – ${b.quartier}`;
+  if (b.loyer) s += `, ${fmtEur(b.loyer)} charges comprises`;
+  if (b.dispo) s += `, disponible le ${fmtDay(b.dispo)}`;
+  return s;
+}
+function matchesLoc(b) {
+  return data.lcand.filter(c => c.statut === 'recherche'
+    && (!b.loyer || !c.loyerMax || c.loyerMax >= b.loyer)
+    && (!b.type || !c.types.length || c.types.includes(b.type))
+    && (!b.quartier || !c.quartiers.length || c.quartiers.includes(b.quartier))
+    && (!b.pieces || !c.piecesMin || c.piecesMin <= b.pieces)
+    && (!b.surface || !c.surface || c.surface <= b.surface)
+    && (!b.meuble || !c.meuble || c.meuble === 'Indifférent' || c.meuble === b.meuble));
+}
+const matchFor = (bcol, b) => bcol === 'bien' ? matches(b) : matchesLoc(b);
 function fmtRdv(s) {
   const d = new Date(s); if (isNaN(d)) return '';
   return d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' }) + ' à ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
@@ -600,14 +700,69 @@ const SEC = {
       meta: joinMeta(esc(p.nom || p.tel), relanceMeta('pige', p) || `ajoutée ${ago(p.created)}`),
       pill: true
     })
+  },
+  lcand: {
+    key: 'lcand', tab: 'Candidats', title: 'Candidats locataires', one: 'candidat', many: 'candidats', neu: 'Nouveau candidat',
+    icon: 'users', person: true, select: true, sorts: ['recent', 'nom'], searchPh: 'Nom, numéro, note…',
+    statuts: [{ k: 'recherche', l: 'En recherche', c: 'blue' }, { k: 'dossier', l: 'Dossier déposé', c: 'violet' }, { k: 'pause', l: 'En pause', c: 'amber' }, { k: 'loue', l: 'A loué', c: 'green' }, { k: 'abandon', l: 'Abandon', c: 'grey' }],
+    name: c => fullName(c) || 'Sans nom',
+    valid: c => c.prenom || c.nom,
+    sections: () => [
+      { t: 'Contact', f: [F('prenom', 'Prénom', 'text', { half: 1 }), F('nom', 'Nom', 'text', { half: 1 }), F('tel', 'Téléphone', 'tel'), F('email', 'Email', 'email')] },
+      { t: 'Ce qu’il recherche', f: [F('loyerMax', 'Loyer max charges comprises', 'number', { unit: '€', half: 1 }), F('entree', 'Entrée souhaitée', 'date', { half: 1 }),
+        F('piecesMin', 'Pièces min', 'num', { max: 5, any: 'Peu importe', half: 1 }), F('surface', 'Surface min', 'number', { unit: 'm²', half: 1 }),
+        F('types', 'Type de logement', 'multi', { opts: TYPES_LOC }), F('meuble', 'Meublé ?', 'single', { opts: MEUBLE_PREF }),
+        F('quartiers', 'Quartiers', 'multi', { opts: quartiers, hint: 'aucun coché = tout Vélizy' }), F('criteres', 'Critères', 'multi', { opts: CRITERES }),
+        F('autres', 'Autres critères', 'text', { ph: 'Animaux, proche RER…' })] },
+      { t: 'Dossier', f: [F('situation', 'Situation', 'select', { opts: SITUATIONS, half: 1 }), F('revenus', 'Revenus nets / mois', 'number', { unit: '€', half: 1 }),
+        F('garant', 'Garant', 'select', { opts: GARANTS, half: 1 }), F('occupants', 'Occupants', 'num', { max: 6, half: 1 }),
+        F('dossierComplet', 'Dossier complet (toutes les pièces reçues)', 'check')] },
+      { t: 'Suivi', f: [F('statut', 'Statut', 'single', { req: 1 }), F('rdv', 'Prochaine visite ou rendez-vous', 'datetime')] }
+    ],
+    row: c => ({
+      tags: [...c.types.map(t => tag(t)), c.piecesMin && tag(`${c.piecesMin}${c.piecesMin >= 5 ? '+' : ''} p.`), c.loyerMax && tag(`≤ ${fmtEur(c.loyerMax)}`, 'b'),
+        c.meuble && c.meuble !== 'Indifférent' && tag(c.meuble), c.dossierComplet && tag('Dossier complet', 'ok'),
+        c.revenus && c.loyerMax && c.revenus < 3 * c.loyerMax && tag('Revenus < 3× loyer', 'w'),
+        ...c.interets.slice(0, 3).map(x => bienById(x.b) && tag(bienById(x.b).nom || bienName(bienById(x.b)), 'v'))],
+      meta: joinMeta(rdvAVenir(c) && `<b>RDV ${esc(fmtRdv(c.rdv))}</b>`, esc(c.quartiers.length ? c.quartiers.join(', ') : 'Tout Vélizy'),
+        c.entree && `entrée le ${fmtDay(c.entree)}`, c.lastContact && `contacté ${ago(c.lastContact)}`),
+      pill: c.statut !== 'recherche'
+    })
+  },
+  lbien: {
+    key: 'lbiens', tab: 'Biens', title: 'Biens à louer', one: 'bien', many: 'biens', neu: 'Nouveau bien à louer',
+    icon: 'key', person: false, select: false, sorts: ['recent', 'prix', 'nom'], searchPh: 'Adresse, propriétaire…',
+    statuts: [{ k: 'dispo', l: 'Disponible', c: 'blue' }, { k: 'visites', l: 'En visites', c: 'amber' }, { k: 'dossier', l: 'Dossier retenu', c: 'violet' }, { k: 'loue', l: 'Loué', c: 'green' }, { k: 'retire', l: 'Retiré', c: 'grey' }],
+    name: bienName,
+    valid: b => b.nom || b.type || b.adresse,
+    sections: () => [
+      { t: 'Le logement', f: [F('nom', 'Nom du dossier', 'text', { ph: 'Ex. nom du propriétaire' }), F('type', 'Type', 'single', { opts: TYPES_LOC }),
+        F('adresse', 'Adresse', 'text', { ph: 'N°, rue, étage' }), F('quartier', 'Quartier', 'select', { opts: quartiers }),
+        F('pieces', 'Pièces', 'num', { max: 6, half: 1 }), F('surface', 'Surface', 'number', { unit: 'm²', half: 1 }),
+        F('meuble', 'Meublé ?', 'single', { opts: MEUBLE }), F('dispo', 'Disponible le', 'date', { half: 1 }), F('dpe', 'DPE', 'select', { opts: DPE, half: 1 })] },
+      { t: 'Loyer', f: [F('loyer', 'Loyer charges comprises', 'number', { unit: '€', half: 1 }), F('charges', 'Dont charges', 'number', { unit: '€', half: 1 }),
+        F('depot', 'Dépôt de garantie', 'number', { unit: '€', half: 1 }), F('honoraires', 'Honoraires locataire', 'number', { unit: '€', half: 1 })] },
+      { t: 'Propriétaire', f: [F('proprietaire', 'Nom', 'text', { half: 1 }), F('proprioTel', 'Téléphone', 'tel', { half: 1 })] },
+      { t: 'Texte pour les messages', f: [F('description', '', 'area', { rows: 4, ph: 'Laissez vide : un résumé est fait automatiquement (type, pièces, surface, quartier, loyer).' })] },
+      { t: 'Statut', f: [F('statut', '', 'single', { req: 1 })] }
+    ],
+    row: b => {
+      const n = ['dispo', 'visites'].includes(b.statut) ? matchesLoc(b).length : 0;
+      return {
+        tags: [b.loyer && tag(`${fmtEur(b.loyer)} CC`, 'b'), b.meuble && tag(b.meuble), b.surface && tag(`${b.surface} m²`), n && tag(plural(n, 'candidat', 'candidats'), 'ok')],
+        meta: joinMeta(esc(b.adresse || b.quartier), b.dispo && `dispo le ${fmtDay(b.dispo)}`),
+        pill: true
+      };
+    }
   }
 };
-const COLS = Object.keys(SEC);
+// Sections du pôle affiché (en local : la vente seulement)
+const activeCols = () => SERVER ? (POLE_COLS[ui.pole] || []) : POLE_COLS.vente;
 const items = col => data[SEC[col].key];
 const stOf = (col, it) => SEC[col].statuts.find(s => s.k === it.statut) || SEC[col].statuts[0];
 const pillHTML = (col, it) => { const s = stOf(col, it); return `<span class="pill s-${s.c}">${s.l}</span>`; };
 function avatar(col, it, size = '') {
-  if (col === 'bien' || (col === 'pige' && !it.nom)) return `<span class="av tile ${size}" aria-hidden="true">${ico(SEC[col].icon)}</span>`;
+  if (col === 'bien' || col === 'lbien' || (col === 'pige' && !it.nom)) return `<span class="av tile ${size}" aria-hidden="true">${ico(SEC[col].icon)}</span>`;
   const n = col === 'pige' ? it.nom : SEC[col].name(it);
   const w = String(n).replace(/^(M\.|Mme|Mr)\s+/i, '').split(/\s+/).filter(Boolean);
   const nom = String(it.nom || '').replace(/^(M\.|Mme|Mr)\s+/i, '');
@@ -620,9 +775,11 @@ function avatar(col, it, size = '') {
 const ui = {
   f: {
     acq: { q: '', statut: 'actif', fq: '', ft: '', fb: '', fp: '', fpro: '', sort: 'nom' },
-    vend: { q: '', statut: '', sort: 'recent' }, bien: { q: '', statut: '', sort: 'recent' }, pige: { q: '', statut: '', sort: 'recent' }
+    vend: { q: '', statut: '', sort: 'recent' }, bien: { q: '', statut: '', sort: 'recent' }, pige: { q: '', statut: '', sort: 'recent' },
+    lcand: { q: '', statut: 'recherche', sort: 'recent' }, lbien: { q: '', statut: '', sort: 'recent' }
   },
-  sel: { acq: new Set(), vend: new Set(), pige: new Set() },
+  sel: { acq: new Set(), vend: new Set(), pige: new Set(), lcand: new Set() },
+  pole: 'vente',
   mode: 'tous', canal: 'SMS',
   sent: new Set(), pick: null, tplId: null, draft: null, subject: '', draftFor: null, bienId: ''
 };
@@ -631,7 +788,8 @@ const SORTS = { nom: 'A → Z', recent: 'Récents', relance: 'Relance', prix: 'P
 function setSec(sec) {
   document.body.dataset.sec = sec;
   $('#gear').classList.toggle('on', sec === 'reg');
-  const tabs = [...COLS.map(c => ({ c, href: `#/l/${c}`, l: SEC[c].tab, icon: SEC[c].icon })), { c: 'msg', href: '#/messages', l: 'Messages', icon: 'msg' }];
+  const tabs = [...activeCols().map(c => ({ c, href: `#/l/${c}`, l: SEC[c].tab, icon: SEC[c].icon })), { c: 'msg', href: '#/messages', l: 'Messages', icon: 'msg' }];
+  $('#tabs').style.gridTemplateColumns = `repeat(${tabs.length}, 1fr)`;
   $('#tabs').innerHTML = tabs.map(t => {
     const late = t.c === 'vend' || t.c === 'pige' ? items(t.c).filter(it => aRelancer(t.c, it)).length : 0;
     return `<a href="${t.href}" class="${t.c === sec ? 'on' : ''}" style="--tc:var(--${t.c})">${ico(t.icon)}${t.l}${late ? `<span class="dot">${late}</span>` : ''}</a>`;
@@ -656,6 +814,7 @@ function filtered(col) {
   const S = SEC[col], f = ui.f[col];
   const words = norm(f.q).split(/\s+/).filter(Boolean);
   const out = items(col).filter(it => {
+    if (f.mine && !isMine(it.id)) return false;
     if (f.statut === '__late') { if (!aRelancer(col, it)) return false; }
     else if (f.statut && it.statut !== f.statut) return false;
     if (col === 'acq') {
@@ -667,7 +826,7 @@ function filtered(col) {
     }
     if (words.length) {
       const vals = Object.values(it).flatMap(v => typeof v === 'string' || typeof v === 'number' ? [v] : Array.isArray(v) && typeof v[0] === 'string' ? v : []);
-      const biens = col === 'acq' ? it.interets.map(x => bienById(x.b)?.nom || '') : [];
+      const biens = LINK[col] ? it.interets.map(x => bienById(x.b)?.nom || '') : [];
       const hay = norm([...vals, ...biens, telClean(it.tel), ...it.notes.map(n => n.t)].join(' '));
       if (!words.every(w => hay.includes(w))) return false;
     }
@@ -677,7 +836,7 @@ function filtered(col) {
     nom: (x, y) => sortKey(col, x).localeCompare(sortKey(col, y), 'fr'),
     recent: (x, y) => y.created - x.created,
     relance: (x, y) => (x.relance || '9999').localeCompare(y.relance || '9999'),
-    prix: (x, y) => (x.prix || 0) - (y.prix || 0)
+    prix: (x, y) => (x.prix || x.loyer || 0) - (y.prix || y.loyer || 0)
   };
   return out.sort(by[f.sort] || by.recent);
 }
@@ -685,7 +844,8 @@ function filtered(col) {
 function renderList(col) {
   const S = SEC[col], f = ui.f[col], all = items(col);
   setSec(col);
-  const needBackup = col === 'acq' && all.length && Date.now() - (data.lastExport || 0) > 14 * DAY;
+  const needBackup = !SERVER && col === 'acq' && all.length && Date.now() - (data.lastExport || 0) > 14 * DAY;
+  const migr = col === 'acq' && localToSend();
   app.innerHTML = `
     <div class="phead">
       <div class="ptile">${ico(S.icon)}</div>
@@ -693,6 +853,8 @@ function renderList(col) {
       <a class="btn primary" href="#/e/${col}/new">${ico('plus')}Ajouter</a>
     </div>
     ${needBackup ? `<a class="banner" href="#/reglages">${ico('info')}<span>Pensez à faire une sauvegarde (Réglages).</span></a>` : ''}
+    ${migr ? `<div class="hint">${ico('info')}<span>Ce téléphone contient <b>${plural(migr, 'fiche', 'fiches')}</b> de l’ancienne version de Carnet. Envoyez-les sur le serveur pour que l’équipe les voie.
+      <br><button class="btn small primary" id="migr" style="margin-top:8px">Envoyer mes fiches sur le serveur</button></span></div>` : ''}
     ${ui.pick === col ? `<div class="hint">${ico('msg')}<span>Cochez les personnes à qui écrire, puis appuyez sur <b>Écrire un message</b> en bas.</span></div>` : ''}
     ${col === 'pige' && !all.length ? `<div class="hint">${ico('info')}<span>Repérez une annonce de particulier (Leboncoin, SeLoger, PAP…), copiez son lien et ajoutez-la ici pour suivre vos appels.</span></div>` : ''}
     <div class="panel">
@@ -714,7 +876,11 @@ function renderList(col) {
 
   $('#q').oninput = e => { f.q = e.target.value; renderItems(col); };
   for (const k of ['fq', 'ft', 'fb', 'fp', 'fpro', 'sort']) { const el = $('#' + k); if (el) el.oninput = el.onchange = e => { f[k] = e.target.value; renderItems(col); }; }
-  $('#chips').onclick = e => { const b = e.target.closest('[data-st]'); if (b) { f.statut = b.dataset.st; renderItems(col); } };
+  $('#chips').onclick = e => {
+    if (e.target.closest('[data-mine]')) { f.mine = !f.mine; renderItems(col); return; }
+    const b = e.target.closest('[data-st]'); if (b) { f.statut = b.dataset.st; renderItems(col); }
+  };
+  const mg = $('#migr'); if (mg) mg.onclick = migrateLocal;
   if (S.select) {
     $('#selAll').onclick = () => { filtered(col).forEach(it => ui.sel[col].add(it.id)); renderItems(col); };
     $('#selNone').onclick = () => { ui.sel[col].clear(); renderItems(col); };
@@ -735,6 +901,7 @@ function renderItems(col) {
   if (col === 'acq') for (const k of ['fq', 'ft', 'fb', 'fp', 'fpro']) $('#' + k).classList.toggle('on', !!f[k]);
   const late = all.filter(it => aRelancer(col, it)).length;
   $('#chips').innerHTML = [
+    ...(SERVER ? [`<button class="fchip mine ${f.mine ? 'on' : ''}" data-mine>Mes fiches</button>`] : []),
     `<button class="fchip ${!f.statut ? 'on' : ''}" data-st="">Tous <b>${all.length}</b></button>`,
     ...(late ? [`<button class="fchip late ${f.statut === '__late' ? 'on' : ''}" data-st="__late">À relancer <b>${late}</b></button>`] : []),
     ...S.statuts.map(s => `<button class="fchip ${f.statut === s.k ? 'on' : ''}" data-st="${s.k}">${s.l} <b>${all.filter(it => it.statut === s.k).length}</b></button>`)
@@ -742,6 +909,8 @@ function renderItems(col) {
   const sel = ui.sel[col];
   $('#list').innerHTML = list.length ? list.map((it, i) => {
     const r = S.row(it);
+    // Fiche d'un collègue : on affiche son prénom
+    if (SERVER && !isMine(it.id)) r.meta = joinMeta(r.meta, esc(memberName(ownerOf(it.id))));
     return `<li class="row ${sel && sel.has(it.id) ? 'is-sel' : ''}" style="animation-delay:${Math.min(i, 12) * 25}ms">
       ${S.select ? `<label class="chk"><input type="checkbox" data-sel="${it.id}" ${sel.has(it.id) ? 'checked' : ''} aria-label="Sélectionner ${esc(S.name(it))}"></label>` : ''}
       <button class="who" data-open="${it.id}">
@@ -773,7 +942,7 @@ function updateCounts(col, list) {
 function blankOf(col) {
   const it = { id: uid(), notes: [], created: Date.now(), updated: Date.now(), lastContact: 0, statut: SEC[col].statuts[0].k };
   for (const s of SEC[col].sections()) for (const f of s.f) if (!(f.k in it)) it[f.k] = f.t === 'multi' ? [] : f.t === 'check' ? false : (f.t === 'number' || f.t === 'num') ? null : '';
-  if (col === 'acq') it.interets = [];
+  if (LINK[col]) it.interets = [];
   return it;
 }
 function chip(type, name, val, checked, label, c) {
@@ -829,26 +998,34 @@ function renderFiche(col, id) {
     if (it.tel) acts.push(`<a class="btn small soft" href="tel:${esc(telClean(it.tel))}">${ico('phone')}Appeler</a>`, `<a class="btn small soft" href="sms:${esc(telClean(it.tel))}">${ico('sms')}SMS</a>`, `<a class="btn small soft" href="https://wa.me/${telIntl(it.tel)}" target="_blank" rel="noopener">WhatsApp</a>`);
     if (it.email) acts.push(`<a class="btn small soft" href="mailto:${esc(it.email)}">${ico('mail')}Email</a>`);
     if (col === 'pige' && it.lien) acts.push(`<a class="btn small soft" href="${esc(it.lien)}" target="_blank" rel="noopener">${ico('ext')}Voir l’annonce</a>`);
-    if (col === 'bien' && it.proprioTel) acts.push(`<a class="btn small soft" href="tel:${esc(telClean(it.proprioTel))}">${ico('phone')}Appeler le propriétaire</a>`);
+    if ((col === 'bien' || col === 'lbien') && it.proprioTel) acts.push(`<a class="btn small soft" href="tel:${esc(telClean(it.proprioTel))}">${ico('phone')}Appeler le propriétaire</a>`);
     if (col === 'pige') acts.push(`<button class="btn small" data-conv="vend">${ico('arrow')}En faire un prospect vendeur</button>`);
     if (col === 'vend') acts.push(`<button class="btn small" data-conv="bien">${ico('arrow')}Créer le mandat</button>`);
   }
-  const ms = !isNew && col === 'bien' ? matches(it) : null;
+  const back = BACK[col];
+  const ms = !isNew && back ? matchFor(col, it) : null;
+  const who = SERVER && !isNew && Srv.store.has(it.id) ? (() => {
+    const r = Srv.store.get(it.id);
+    const by = memberName(r.owner), upd = r.updated_by && r.updated_by !== r.owner ? memberName(r.updated_by) : '';
+    return `<small>${by ? `Ajouté par ${esc(by)}` : ''}${upd ? ` · modifié par ${esc(upd)}` : ''}</small>`;
+  })() : '';
   app.innerHTML = `
     <a class="back" href="#/l/${col}">← ${S.title}</a>
     <div class="hero">${avatar(col, it, 'big')}<div class="t">
       <h1>${isNew ? S.neu : esc(S.name(it))}</h1>
-      <div class="sub">${isNew ? 'Remplissez ce que vous savez, le reste peut attendre.' : `${pillHTML(col, it)}${col === 'acq' && fmtPieces(it) ? ' ' + esc(fmtPieces(it)) : ''}`}</div>
+      <div class="sub">${isNew ? 'Remplissez ce que vous savez, le reste peut attendre.' : `${pillHTML(col, it)}${col === 'acq' && fmtPieces(it) ? ' ' + esc(fmtPieces(it)) : ''} ${who}`}</div>
     </div></div>
     ${acts.length ? `<div class="actions" id="acts">${acts.join('')}</div>` : ''}
-    ${col === 'acq' ? '<div class="card" id="intr"></div>' : ''}
-    ${col === 'bien' && !isNew ? interessesHTML(it) : ''}
+    ${LINK[col] ? '<div class="card" id="intr"></div>' : ''}
+    ${back && !isNew ? interessesHTML(it, col) : ''}
     ${ms ? `<div class="card">
-      <div class="card-h">Acquéreurs correspondants <span class="n">${ms.length}</span></div>
-      ${ms.length ? `<ul class="mini">${ms.slice(0, 8).map(a => `<li><a href="#/e/acq/${a.id}">${avatar('acq', a, 'sm')}<span>${esc(SEC.acq.name(a))}</span><small>${esc(fmtK(a.budget) || '')}</small></a></li>`).join('')}</ul>
+      <div class="card-h">${back === 'acq' ? 'Acquéreurs' : 'Candidats'} correspondants <span class="n">${ms.length}</span></div>
+      ${ms.length ? `<ul class="mini">${ms.slice(0, 8).map(a => `<li><a href="#/e/${back}/${a.id}">${avatar(back, a, 'sm')}<span>${esc(SEC[back].name(a))}</span><small>${esc(back === 'acq' ? fmtK(a.budget) : fmtEur(a.loyerMax))}</small></a></li>`).join('')}</ul>
         ${ms.length > 8 ? `<p class="sub">… et ${ms.length - 8} autre(s).</p>` : ''}
-        <button class="btn primary block" id="present">${ico('send')}Présenter ce bien à ${ms.length > 1 ? `ces ${ms.length} acquéreurs` : 'cet acquéreur'}</button>`
-        : '<p class="sub" style="margin:0">Aucun acquéreur actif ne correspond (budget, type, quartier, pièces). Complétez le prix, le type et le quartier du bien pour affiner.</p>'}
+        <button class="btn primary block" id="present">${ico('send')}Présenter ce bien à ${ms.length > 1 ? `ces ${ms.length} ${SEC[back].many}` : `ce ${SEC[back].one}`}</button>`
+        : `<p class="sub" style="margin:0">${back === 'acq'
+          ? 'Aucun acquéreur actif ne correspond (budget, type, quartier, pièces). Complétez le prix, le type et le quartier du bien pour affiner.'
+          : 'Aucun candidat en recherche ne correspond (loyer, type, quartier, pièces, meublé). Complétez le loyer, le type et le quartier pour affiner.'}</p>`}
     </div>` : ''}
     <form id="f" class="form" autocomplete="off" novalidate>
       ${S.sections().map(s => `<fieldset class="card"><div class="card-h">${s.t}</div><div class="fgrid">${s.f.map(f => fieldHTML(col, f, it)).join('')}</div></fieldset>`).join('')}
@@ -859,7 +1036,7 @@ function renderFiche(col, id) {
       </div>
       <div class="savebar">
         <button class="btn primary" type="submit">Enregistrer</button>
-        ${isNew ? '' : `<button class="btn danger" type="button" id="del" aria-label="Supprimer">${ico('trash')}</button>`}
+        ${isNew || !canDelete(it.id) ? '' : `<button class="btn danger" type="button" id="del" aria-label="Supprimer">${ico('trash')}</button>`}
       </div>
     </form>`;
 
@@ -890,7 +1067,7 @@ function renderFiche(col, id) {
   };
   const del = $('#del');
   if (del) del.onclick = () => {
-    if (!confirm(`Supprimer « ${S.name(it)} » ? Cette action est définitive.`)) return;
+    if (!confirm(`Supprimer « ${S.name(it)} » ? ${SERVER ? 'La fiche disparaîtra pour toute l’équipe.' : 'Cette action est définitive.'}`)) return;
     data[S.key] = items(col).filter(x => x.id !== it.id);
     ui.sel[col]?.delete(it.id); save(); toast('Supprimé');
     location.hash = `#/l/${col}`;
@@ -911,19 +1088,20 @@ function renderFiche(col, id) {
     }
   };
   const writeAbout = list => {
-    ui.sel.acq = new Set(list.map(a => a.id)); ui.sent.clear();
+    ui.sel[back] = new Set(list.map(a => a.id)); ui.sent.clear();
     ui.bienId = it.id;
     const t = data.modeles.find(m => m.texte.includes('{bien}')) || data.modeles[0];
     ui.tplId = t && t.id; ui.draftFor = null;
-    location.hash = '#/envoi/acq';
+    location.hash = `#/envoi/${back}`;
   };
   const present = $('#present');
   if (present) present.onclick = () => writeAbout(ms);
   const wi = $('#writeInt');
-  if (wi) wi.onclick = () => writeAbout(interesses(it).filter(a => a.statut !== 'achete'));
+  if (wi) wi.onclick = () => writeAbout(interesses(it, col).filter(a => !['achete', 'loue'].includes(a.statut)));
   const intr = $('#intr');
   if (intr) {
-    const draw = () => { intr.innerHTML = interetsHTML(it); };
+    const to = LINK[col].to;
+    const draw = () => { intr.innerHTML = interetsHTML(it, col); };
     const commit = () => { if (!isNew) save(); draw(); };
     intr.onchange = e => {
       const t = e.target;
@@ -931,11 +1109,11 @@ function renderFiche(col, id) {
       else if (t.id === 'addb' && t.value) {
         let id = t.value;
         if (id === '__new') {
-          const nom = (prompt('Nom du dossier (ex. nom du vendeur) :') || '').trim();
+          const nom = (prompt(`Nom du dossier (ex. nom du ${to === 'bien' ? 'vendeur' : 'propriétaire'}) :`) || '').trim();
           if (!nom) { draw(); return; }
-          const b = Object.assign(blankOf('bien'), { nom });
-          b.notes.push({ d: Date.now(), t: `Créé depuis la fiche de ${SEC.acq.name(it)} : à compléter` });
-          data.biens.push(b); save(); id = b.id;
+          const b = Object.assign(blankOf(to), { nom });
+          b.notes.push({ d: Date.now(), t: `Créé depuis la fiche de ${S.name(it)} : à compléter` });
+          items(to).push(b); save(); id = b.id;
         }
         it.interets.push({ b: id, e: 'demande', d: Date.now() }); commit();
       }
@@ -944,25 +1122,28 @@ function renderFiche(col, id) {
     draw();
   }
 }
-function interetsHTML(a) {
-  const rest = data.biens.filter(b => !a.interets.some(x => x.b === b.id)).sort((x, y) => bienName(x).localeCompare(bienName(y), 'fr'));
+const prixOf = b => b.prix ? fmtK(b.prix) : b.loyer ? `${fmtEur(b.loyer)} CC` : '';
+function interetsHTML(a, col) {
+  const L = LINK[col];
+  const rest = items(L.to).filter(b => !a.interets.some(x => x.b === b.id)).sort((x, y) => bienName(x).localeCompare(bienName(y), 'fr'));
   const rows = a.interets.map((x, i) => {
     const b = bienById(x.b); if (!b) return '';
-    return `<li><a href="#/e/bien/${b.id}">${esc(b.nom || bienName(b))}${b.prix ? ` <small>${fmtK(b.prix)}</small>` : ''}</a>
-      <select data-et="${i}" aria-label="Où en est-il avec ce bien">${ETAPES.map(e => `<option value="${e.k}" ${e.k === x.e ? 'selected' : ''}>${e.l}</option>`).join('')}</select>
+    return `<li><a href="#/e/${L.to}/${b.id}">${esc(b.nom || bienName(b))}${prixOf(b) ? ` <small>${prixOf(b)}</small>` : ''}</a>
+      <select data-et="${i}" aria-label="Où en est-il avec ce bien">${L.etapes.map(e => `<option value="${e.k}" ${e.k === x.e ? 'selected' : ''}>${e.l}</option>`).join('')}</select>
       <button type="button" data-rmi="${i}" aria-label="Retirer ce bien">×</button></li>`;
   }).join('');
   return `<div class="card-h">Biens demandés ou proposés ${a.interets.length ? `<span class="n">${a.interets.length}</span>` : ''}</div>
     ${rows ? `<ul class="ilist">${rows}</ul>` : '<p class="sub" style="margin:0 0 12px">Les biens sur lesquels il a appelé, que vous lui avez proposés ou fait visiter.</p>'}
-    <select id="addb" aria-label="Ajouter un bien"><option value="">+ Ajouter un bien…</option>${rest.map(b => `<option value="${b.id}">${esc(bienName(b))}${b.prix ? ' · ' + fmtK(b.prix) : ''}</option>`).join('')}<option value="__new">Nouveau dossier…</option></select>`;
+    <select id="addb" aria-label="Ajouter un bien"><option value="">+ Ajouter un bien…</option>${rest.map(b => `<option value="${b.id}">${esc(bienName(b))}${prixOf(b) ? ' · ' + prixOf(b) : ''}</option>`).join('')}<option value="__new">Nouveau dossier…</option></select>`;
 }
-function interessesHTML(b) {
-  const list = interesses(b);
+function interessesHTML(b, bcol) {
+  const back = BACK[bcol];
+  const list = interesses(b, bcol);
   if (!list.length) return '';
-  const actifs = list.filter(a => a.statut !== 'achete').length;
+  const actifs = list.filter(a => !['achete', 'loue'].includes(a.statut)).length;
   return `<div class="card">
     <div class="card-h">Ont demandé ou visité <span class="n">${list.length}</span></div>
-    <ul class="mini">${list.map(a => { const e = etape(a.interets.find(x => x.b === b.id).e); return `<li><a href="#/e/acq/${a.id}">${avatar('acq', a, 'sm')}<span>${esc(SEC.acq.name(a))}</span><small class="pill s-${e.c}">${e.l}</small></a></li>`; }).join('')}</ul>
+    <ul class="mini">${list.map(a => { const e = etapeOf(back, a.interets.find(x => x.b === b.id).e); return `<li><a href="#/e/${back}/${a.id}">${avatar(back, a, 'sm')}<span>${esc(SEC[back].name(a))}</span><small class="pill s-${e.c}">${e.l}</small></a></li>`; }).join('')}</ul>
     ${actifs ? `<button class="btn primary block" id="writeInt">${ico('send')}Écrire à ${actifs > 1 ? `ces ${actifs} personnes` : 'cette personne'}</button>
     <p class="sub" style="margin:8px 0 0;text-align:center">Pratique pour une baisse de prix ou une nouvelle info.</p>` : ''}
   </div>`;
@@ -970,12 +1151,12 @@ function interessesHTML(b) {
 
 /* ---------- Envoi de messages ---------- */
 function fill(text, p, col) {
-  const b = data.biens.find(x => x.id === ui.bienId);
+  const b = bienById(ui.bienId);
   const vals = {
     prenom: p.prenom || p.nom || '', nom: p.nom || '',
-    quartiers: col === 'acq' ? (p.quartiers.length ? p.quartiers.join(', ') : 'Vélizy') : (p.quartier || ''),
-    types: (p.types || []).join(', '), budget: fmtK(p.budget), signature: data.signature || '',
-    bien: b ? bienDesc(b) : '[choisissez le bien à présenter]'
+    quartiers: LINK[col] ? (p.quartiers?.length ? p.quartiers.join(', ') : 'Vélizy') : (p.quartier || ''),
+    types: (p.types || []).join(', '), budget: fmtK(p.budget) || fmtEur(p.loyerMax), signature: data.signature || '',
+    bien: b ? descOf(b) : '[choisissez le bien à présenter]'
   };
   return text.replace(/\{(\w+)\}/g, (m, k) => k in vals ? vals[k] : m);
 }
@@ -1007,7 +1188,8 @@ function renderEnvoi(col) {
   if (!data.modeles.length) { location.hash = '#/m/new'; return; }
   const m = data.modeles.find(x => x.id === ui.tplId) || data.modeles[0];
   if (ui.draftFor !== m.id) { ui.tplId = m.id; ui.draft = m.texte; ui.subject = m.titre; ui.draftFor = m.id; }
-  const biens = data.biens.filter(b => b.statut !== 'vendu' && b.statut !== 'retire');
+  const bcol = LINK[col]?.to || (activeCols().includes('bien') ? 'bien' : 'lbien');
+  const biens = items(bcol).filter(b => !['vendu', 'retire', 'loue'].includes(b.statut));
   const needBien = ui.draft.includes('{bien}');
 
   app.innerHTML = `
@@ -1024,8 +1206,8 @@ function renderEnvoi(col) {
       <h2>Choisissez le message</h2>
       <p class="sub">Appuyez sur un modèle. Vous pouvez ensuite modifier le texte, seulement pour cet envoi.</p>
       <div class="tplpick" id="tpls">${data.modeles.map(x => `<button type="button" data-tpl="${x.id}" class="${x.id === m.id ? 'on' : ''}">${esc(x.titre)}</button>`).join('')}<a href="#/m/new">+ Nouveau</a></div>
-      ${needBien || ui.bienId ? `<label>Bien à présenter<select id="bien"><option value="">— Choisir un bien —</option>${biens.map(b => `<option value="${b.id}" ${b.id === ui.bienId ? 'selected' : ''}>${esc(bienName(b))}${b.prix ? ' · ' + fmtK(b.prix) : ''}${b.adresse ? ' · ' + esc(b.adresse) : ''}</option>`).join('')}</select></label>
-        ${!biens.length ? `<div class="warnbox">Ce message parle d’un bien, mais vous n’avez aucun mandat. <a href="#/e/bien/new">Ajouter un mandat</a> ou retirez {bien} du texte.</div>` : !ui.bienId ? '<div class="warnbox">Ce message parle d’un bien : choisissez lequel juste au-dessus.</div>' : ''}` : ''}
+      ${needBien || ui.bienId ? `<label>Bien à présenter<select id="bien"><option value="">— Choisir un bien —</option>${biens.map(b => `<option value="${b.id}" ${b.id === ui.bienId ? 'selected' : ''}>${esc(bienName(b))}${prixOf(b) ? ' · ' + prixOf(b) : ''}${b.adresse ? ' · ' + esc(b.adresse) : ''}</option>`).join('')}</select></label>
+        ${!biens.length ? `<div class="warnbox">Ce message parle d’un bien, mais vous n’en avez aucun de disponible. <a href="#/e/${bcol}/new">Ajouter un bien</a> ou retirez {bien} du texte.</div>` : !ui.bienId ? '<div class="warnbox">Ce message parle d’un bien : choisissez lequel juste au-dessus.</div>' : ''}` : ''}
       <label>Texte du message<textarea id="draft" rows="9">${esc(ui.draft)}</textarea></label>
       <div class="ins">Insérer : ${INSERTS.map(([k, l]) => `<button type="button" data-ins="${k}">${l}</button>`).join('')}</div>
       <label>Objet <small>(seulement pour les emails)</small><input id="subj" value="${esc(ui.subject)}"></label>
@@ -1078,7 +1260,7 @@ function markSent(col, p, via, m) {
   ui.sent.add(k);
   p.lastContact = Date.now();
   p.notes.unshift({ d: Date.now(), t: `Message « ${m.titre} » envoyé par ${via}` });
-  const b = data.biens.find(x => x.id === ui.bienId);
+  const b = bienById(ui.bienId);
   if (b && ui.draft.includes('{bien}')) b.notes.unshift({ d: Date.now(), t: `Présenté à ${SEC[col].name(p)} (${via})` });
   save();
 }
@@ -1142,12 +1324,14 @@ function renderStep3(col, sel, m) {
 /* ---------- Page Messages ---------- */
 function renderMessages() {
   setSec('msg'); setActionbar('');
-  const pending = ['acq', 'vend', 'pige'].filter(c => ui.sel[c].size);
-  const who = [
-    ['acq', 'À des acquéreurs', 'Nouveau bien, relance, baisse de prix…'],
-    ['vend', 'À des prospects vendeurs', 'Relance, proposition d’estimation…'],
-    ['pige', 'À des contacts de pige', 'Premier contact après une annonce'],
-  ];
+  const pending = activeCols().filter(c => SEC[c].select && ui.sel[c].size);
+  const WHO = {
+    acq: ['À des acquéreurs', 'Nouveau bien, relance, baisse de prix…'],
+    vend: ['À des prospects vendeurs', 'Relance, proposition d’estimation…'],
+    pige: ['À des contacts de pige', 'Premier contact après une annonce'],
+    lcand: ['À des candidats locataires', 'Logement disponible, pièces du dossier, relance…']
+  };
+  const who = activeCols().filter(c => WHO[c]).map(c => [c, ...WHO[c]]);
   app.innerHTML = `
     <div class="phead"><div class="ptile">${ico('msg')}</div><div class="t"><h1>Messages</h1><p class="sub">Écrire à plusieurs personnes en quelques appuis.</p></div></div>
     ${pending.map(c => `<a class="bigbtn" href="#/envoi/${c}" style="--c:var(--${c});--cs:var(--${c}-s);border-color:var(--${c});margin-bottom:10px"><div class="ptile">${ico('send')}</div><div class="t"><strong>Reprendre l’envoi</strong><small>${plural(ui.sel[c].size, SEC[c].one + ' sélectionné', SEC[c].many + ' sélectionnés')}</small></div>${ico('chev', 'chev')}</a>`).join('')}
@@ -1208,9 +1392,10 @@ function renderModele(id) {
 
 /* ---------- Réglages ---------- */
 function renderReglages() {
+  if (SERVER) { renderReglagesServer(); return; }
   setSec('reg'); setActionbar('');
   const th = data.theme || 'light';
-  const total = COLS.reduce((n, c) => n + items(c).length, 0);
+  const total = activeCols().reduce((n, c) => n + items(c).length, 0);
   app.innerHTML = `
     <div class="phead"><div class="ptile">${ico('gear')}</div><div class="t"><h1>Réglages</h1><p class="sub">Tout est enregistré sur cet appareil uniquement.</p></div></div>
     <div class="card"><div class="card-h">Apparence</div>
@@ -1224,7 +1409,7 @@ function renderReglages() {
       <p class="sub">Un quartier par ligne.</p>
       <textarea id="qs" rows="7">${esc(data.quartiers.join('\n'))}</textarea>
     </div>
-    <div class="savebar"><button class="btn primary" id="saveSet">Enregistrer</button></div>
+    <div class="savebar" style="position:static;background:none"><button class="btn primary" id="saveSet">Enregistrer</button></div>
     <div class="card"><div class="card-h">Sauvegarde</div>
       <p class="sub">${total} fiche${total > 1 ? 's' : ''} au total. Exportez régulièrement un fichier de sauvegarde et gardez-le en lieu sûr : il sert aussi à transférer les données sur un autre appareil.
       ${data.lastExport ? `<br>Dernière sauvegarde : ${new Date(data.lastExport).toLocaleDateString('fr-FR')}.` : '<br>Aucune sauvegarde pour l’instant.'}</p>
@@ -1270,7 +1455,8 @@ async function importFile(file) {
   if (!file) return;
   try {
     const d = JSON.parse(await file.text());
-    if (d.kind === 'carnet-ajout') { importAjout(d); return; }
+    // Sur le serveur, un fichier ne remplace jamais les fiches de l'équipe : il les complète
+    if (SERVER || d.kind === 'carnet-ajout') { importAjout(d); return; }
     if (!Array.isArray(d.acquereurs) || !Array.isArray(d.modeles)) throw 0;
     if (!confirm('Remplacer les données de cet appareil par ce fichier ?')) return;
     d.version ??= 1; data = migrate(Object.assign(defaults(), d));
@@ -1279,18 +1465,21 @@ async function importFile(file) {
 }
 // Fichier « à ajouter » (ex. carnet papier recopié) : complète les fiches sans rien effacer.
 // Les doublons (même téléphone, même nom de dossier) sont ignorés : on peut l'importer deux fois sans risque.
-function importAjout(d) {
-  const A = d.acquereurs || [], B = d.biens || [], V = d.vendeurs || [];
-  if (!confirm(`Ajouter ${A.length} acquéreurs, ${B.length} biens et ${V.length} vendeurs à vos fiches ?\nRien de ce que vous avez déjà ne sera effacé.`)) return;
+function importAjout(d, silent) {
+  if (SERVER && ui.pole !== 'vente') { toast('Passez sur le pôle Vente pour importer ces fiches'); return false; }
+  const A = d.acquereurs || [], B = d.biens || [], V = d.vendeurs || [], P = d.pige || [];
+  if (!silent && !confirm(`Ajouter ${A.length} acquéreurs, ${B.length} biens, ${V.length} vendeurs et ${P.length} annonces de pige ?\nRien de ce qui existe déjà ne sera effacé.`)) return false;
+  const ids = new Set(Object.keys(KINDS).flatMap(k => (data[k] || []).map(x => x.id)));
   const idMap = {}; let n = 0, skip = 0;
   for (const b of B) {
-    const ex = data.biens.find(x => x.nom && norm(x.nom) === norm(b.nom));
-    if (ex) { idMap[b.id] = ex.id; skip++; } else { data.biens.push(b); idMap[b.id] = b.id; n++; }
+    const ex = data.biens.find(x => x.id === b.id || (x.nom && norm(x.nom) === norm(b.nom)));
+    if (ex) { idMap[b.id] = ex.id; skip++; } else { data.biens.push(b); idMap[b.id] = b.id; ids.add(b.id); n++; }
   }
-  for (const [list, key] of [[A, 'acquereurs'], [V, 'vendeurs']]) {
+  for (const [list, key] of [[A, 'acquereurs'], [V, 'vendeurs'], [P, 'pige']]) {
     const tels = new Set(data[key].map(x => telClean(x.tel)).filter(Boolean));
     for (const x of list) {
-      if (x.tel && tels.has(telClean(x.tel))) { skip++; continue; }
+      if (ids.has(x.id) || (x.tel && tels.has(telClean(x.tel)))) { skip++; continue; }
+      ids.add(x.id);
       if (x.interets) x.interets = x.interets.map(i => ({ ...i, b: idMap[i.b] || i.b }));
       data[key].push(x); n++;
     }
@@ -1298,27 +1487,482 @@ function importAjout(d) {
   data = migrate(data); save();
   toast(`${n} fiches ajoutées${skip ? `, ${skip} déjà présentes` : ''} ✓`);
   route();
+  return true;
 }
 function resetUi() { for (const c in ui.sel) ui.sel[c].clear(); ui.sent.clear(); ui.draftFor = null; ui.bienId = ''; ui.pick = null; }
 
+/* =====================================================================
+   Serveur de l'agence
+   - Chaque fiche est une ligne de la table « fiches » (contenu en JSON).
+   - save() compare chaque fiche à sa dernière version connue et n'envoie que ce qui a changé.
+   - Les envois passent par une file d'attente gardée sur le téléphone :
+     sans réseau, rien n'est perdu, tout part au retour de la connexion.
+   - Les modifications des collègues arrivent en temps réel.
+   ===================================================================== */
+const Srv = { me: null, team: [], store: new Map(), snap: new Map(), outbox: [], lastSync: '', flushing: false, channel: null, loaded: false };
+const SEL = 'id,pole,kind,data,owner,deleted,updated_at,updated_by';
+const KNOWN_KINDS = new Set([...Object.values(KINDS), 'reglages']);
+const KEY_OF_KIND = Object.fromEntries(Object.entries(KINDS).map(([k, v]) => [v, k]));
+const cacheKey = () => `carnet-cache-${Srv.me.id}`;
+const outboxKey = () => `carnet-outbox-${Srv.me.id}`;
+const isResp = () => Srv.me?.role === 'responsable';
+const ownerOf = id => Srv.store.get(id)?.owner;
+const isMine = id => !SERVER || !Srv.store.has(id) || ownerOf(id) === Srv.me?.id;
+const canDelete = id => !SERVER || isResp() || isMine(id);
+const memberName = id => { const p = Srv.team.find(x => x.id === id); return p ? (p.nom || p.email.split('@')[0]) : ''; };
+function lsGet(k, def) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : def; } catch (e) { return def; } }
+function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+const isNetErr = e => !e || !e.code || /fetch|network|load failed/i.test(e.message || '');
+function errMsg(e) {
+  const m = e?.message || '';
+  if (/supprimer ou la restaurer/.test(m)) return 'Seul un responsable ou l’auteur de la fiche peut la supprimer';
+  if (e?.code === '42501') return 'Action refusée : vous n’avez pas les droits sur cette fiche';
+  return 'Erreur du serveur : ' + m;
+}
+function setSync(state) {
+  const s = $('#sync'); if (!s) return;
+  s.hidden = !SERVER || !Srv.me?.pole;
+  s.className = state === 'ok' ? '' : state;
+  s.title = { ok: 'Tout est enregistré sur le serveur', wait: 'Envoi en cours…', off: 'Hors connexion : vos modifications partiront au retour du réseau' }[state] || '';
+}
+function persist() {
+  if (!Srv.me) return;
+  lsSet(cacheKey(), { rows: [...Srv.store.values()], lastSync: Srv.lastSync });
+  lsSet(outboxKey(), Srv.outbox);
+}
+function replaceInPlace(target, src) {
+  for (const k of Object.keys(target)) if (!(k in src)) delete target[k];
+  Object.assign(target, src);
+}
+
+// Construit les listes du pôle affiché à partir des lignes connues (mêmes objets : un formulaire ouvert reste lié à sa fiche)
+function buildData() {
+  const pole = ui.pole;
+  const d = { ...defaults(), theme: data.theme, signature: Srv.me?.signature || '', modeles: [] };
+  for (const r of Srv.store.values()) {
+    if (r.deleted || r.pole !== pole) continue;
+    if (r.kind === 'reglages') { if (Array.isArray(r.data?.quartiers)) d.quartiers = r.data.quartiers; continue; }
+    const key = KEY_OF_KIND[r.kind]; if (key) d[key].push(r.data);
+  }
+  migrate(d);
+  for (const r of Srv.store.values()) if (r.pole === pole && !r.deleted && r.kind !== 'reglages') Srv.snap.set(r.id, JSON.stringify(r.data));
+  if (Srv.store.has(`reglages-${pole}`)) Srv.snap.set(`reglages-${pole}`, JSON.stringify({ quartiers: d.quartiers }));
+  return d;
+}
+// Premier passage d'un pôle sur le serveur : on crée les modèles de messages
+function ensureDefaults() {
+  if ([...Srv.store.values()].some(r => r.kind === 'modele' && r.pole === ui.pole)) return;
+  data.modeles.push(...defaultTemplates(ui.pole)); save();
+}
+
+Srv.save = function () {
+  if (!Srv.me?.pole) return;
+  const pole = ui.pole, seen = new Set();
+  const put = (id, kind, obj) => {
+    seen.add(id);
+    const s = JSON.stringify(obj);
+    if (Srv.snap.get(id) === s) return;
+    Srv.snap.set(id, s);
+    let r = Srv.store.get(id);
+    if (!r) { r = { id, pole, kind, owner: Srv.me.id, updated_at: '', updated_by: Srv.me.id }; Srv.store.set(id, r); }
+    r.data = obj; r.deleted = false;
+    queue(r);
+  };
+  for (const [key, kind] of Object.entries(KINDS)) for (const it of data[key] || []) put(it.id, kind, it);
+  put(`reglages-${pole}`, 'reglages', { quartiers: data.quartiers });
+  // Fiche retirée d'une liste = supprimée (suppression « douce » : un responsable peut la retrouver en base)
+  for (const r of Srv.store.values()) {
+    if (r.pole !== pole || r.deleted || seen.has(r.id) || !KNOWN_KINDS.has(r.kind)) continue;
+    r.deleted = true; Srv.snap.delete(r.id); queue(r);
+  }
+  persist(); flush();
+};
+function queue(r) {
+  Srv.outbox = Srv.outbox.filter(o => o.id !== r.id);
+  Srv.outbox.push({ id: r.id, pole: r.pole, kind: r.kind, data: r.data, deleted: !!r.deleted });
+}
+const dropOutbox = o => { Srv.outbox = Srv.outbox.filter(x => x !== o); };
+const payload = o => ({ id: o.id, pole: o.pole, kind: o.kind, data: o.data, deleted: o.deleted });
+function written(rows) {
+  for (const r of rows || []) {
+    const cur = Srv.store.get(r.id);
+    if (cur) Object.assign(cur, { owner: r.owner, updated_at: r.updated_at, updated_by: r.updated_by });
+  }
+}
+async function flush() {
+  if (Srv.flushing || !Srv.outbox.length || !sb || !Srv.me?.pole) return;
+  Srv.flushing = true; setSync('wait');
+  let offline = false;
+  try {
+    while (Srv.outbox.length && !offline) {
+      const batch = Srv.outbox.slice(0, 100);
+      const { data: rows, error } = await sb.from('fiches').upsert(batch.map(payload), { onConflict: 'id' }).select('id,owner,updated_at,updated_by');
+      if (!error) { batch.forEach(dropOutbox); written(rows); continue; }
+      if (isNetErr(error)) { offline = true; break; }
+      // Une fiche refusée (droits) ne doit pas bloquer les autres : on les renvoie une par une
+      for (const o of batch) {
+        const { data: r2, error: e2 } = await sb.from('fiches').upsert(payload(o), { onConflict: 'id' }).select('id,owner,updated_at,updated_by');
+        if (e2 && isNetErr(e2)) { offline = true; break; }
+        dropOutbox(o);
+        if (e2) { toast(errMsg(e2)); await refetch(o.id); } else written(r2);
+      }
+    }
+  } catch (e) { offline = true; }
+  finally {
+    Srv.flushing = false; persist();
+    setSync(offline ? 'off' : Srv.outbox.length ? 'wait' : 'ok');
+  }
+}
+async function refetch(id) {
+  const { data: r, error } = await sb.from('fiches').select(SEL).eq('id', id).maybeSingle();
+  if (error) return;
+  if (r) applyRows([r]); else { const cur = Srv.store.get(id); if (cur) { cur.deleted = true; Srv.snap.delete(id); } }
+  onRemote([id], true);
+}
+// Intègre des lignes venues du serveur ; une modification locale pas encore envoyée reste prioritaire
+function applyRows(rows) {
+  const ids = [];
+  for (const r of rows) {
+    if (Srv.outbox.some(o => o.id === r.id)) continue;
+    const cur = Srv.store.get(r.id);
+    if (cur && cur.updated_at && r.updated_at && cur.updated_at > r.updated_at) continue;
+    if (cur && cur.data && r.data && cur.kind === r.kind) { replaceInPlace(cur.data, r.data); Object.assign(cur, { ...r, data: cur.data }); }
+    else Srv.store.set(r.id, { ...r });
+    if (r.deleted) Srv.snap.delete(r.id); else Srv.snap.set(r.id, JSON.stringify(Srv.store.get(r.id).data));
+    if (r.updated_at > Srv.lastSync) Srv.lastSync = r.updated_at;
+    ids.push(r.id);
+  }
+  return ids;
+}
+async function pull(full) {
+  const rows = [];
+  for (let from = 0; ; from += 1000) {
+    let q = sb.from('fiches').select(SEL);
+    q = full || !Srv.lastSync ? q.eq('deleted', false) : q.gt('updated_at', Srv.lastSync);
+    const { data: d, error } = await q.order('id').range(from, from + 999);
+    if (error) throw error;
+    rows.push(...d);
+    if (d.length < 1000) break;
+  }
+  if (full) {
+    // Tout recharger : ce qui n'est plus visible (fiche supprimée, droits changés) disparaît du téléphone
+    const keep = new Set(rows.map(r => r.id));
+    for (const id of [...Srv.store.keys()]) if (!keep.has(id) && !Srv.outbox.some(o => o.id === id)) { Srv.store.delete(id); Srv.snap.delete(id); }
+  }
+  return applyRows(rows);
+}
+let remoteTimer = null, viewStale = false;
+function onRemote(ids, quiet) {
+  if (!ids || !ids.length || !Srv.me?.pole) return;
+  clearTimeout(remoteTimer);
+  remoteTimer = setTimeout(() => {
+    data = buildData(); persist();
+    const [page, , b] = location.hash.replace(/^#\/?/, '').split('/');
+    // On ne redessine pas sous les doigts de l'agent (formulaire ouvert, saisie en cours)
+    if (page === 'e' || page === 'm' || page === 'envoi' || page === 'reglages') {
+      if (page === 'e' && ids.includes(b) && !quiet) toast('Cette fiche vient d’être modifiée par un collègue');
+      viewStale = true; return;
+    }
+    if (document.activeElement && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) { viewStale = true; return; }
+    route(true);
+  }, 300);
+}
+function subscribe() {
+  if (!sb.channel) return;
+  if (Srv.channel) sb.removeChannel(Srv.channel);
+  Srv.channel = sb.channel(`fiches-${Srv.me.id}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'fiches' }, p => {
+      if (p.new && p.new.id) onRemote(applyRows([p.new]));
+      else if (p.old && p.old.id) { const cur = Srv.store.get(p.old.id); if (cur) { cur.deleted = true; Srv.snap.delete(cur.id); onRemote([cur.id]); } }
+    })
+    .subscribe();
+}
+async function loadTeam() {
+  const { data: t, error } = await sb.from('profiles').select('id,email,nom,pole,role,actif').order('nom');
+  if (!error && t) { Srv.team = t; lsSet(`carnet-team-${Srv.me.id}`, t); }
+}
+
+/* ---------- Connexion ---------- */
+const appUrl = () => location.origin + location.pathname;
+function authErr(e) {
+  const m = String(e?.message || '');
+  if (m === 'short' || /at least|characters/i.test(m)) return 'Le mot de passe doit faire au moins 8 caractères.';
+  if (/Invalid login/i.test(m)) return 'Email ou mot de passe incorrect.';
+  if (/not confirmed/i.test(m)) return 'Confirmez d’abord votre email (lien reçu par email), puis reconnectez-vous.';
+  if (/already registered|already exists/i.test(m)) return 'Un compte existe déjà avec cet email : connectez-vous.';
+  if (/rate limit|too many/i.test(m)) return 'Trop de tentatives : réessayez dans quelques minutes.';
+  if (/fetch|network|load failed/i.test(m)) return 'Pas de connexion internet.';
+  return 'Erreur : ' + m;
+}
+function renderAuth(mode, msg = '', ok = '') {
+  document.body.classList.add('auth'); document.body.dataset.sec = 'acq'; setActionbar('');
+  const T = { login: 'Connexion', signup: 'Créer mon compte', forgot: 'Mot de passe oublié', newpass: 'Nouveau mot de passe' };
+  const B = { login: 'Se connecter', signup: 'Créer mon compte', forgot: 'Recevoir un lien', newpass: 'Enregistrer le mot de passe' };
+  app.innerHTML = `<div class="authbox">
+    <div class="phead"><div class="ptile">${ico('users')}</div><div class="t"><h1>${T[mode]}</h1><p class="sub">Carnet · votre agence</p></div></div>
+    <form class="card" id="authf" novalidate>
+      ${msg ? `<div class="err" role="alert">${esc(msg)}</div>` : ''}${ok ? `<div class="okbox">${esc(ok)}</div>` : ''}
+      ${mode === 'signup' ? `<label>Prénom et nom<input name="nom" autocomplete="name" value="${esc(ui.authNom || '')}"></label>` : ''}
+      ${mode !== 'newpass' ? `<label>Email<input name="email" type="email" inputmode="email" autocomplete="email" value="${esc(ui.authEmail || '')}"></label>` : ''}
+      ${mode !== 'forgot' ? `<label>${mode === 'newpass' ? 'Nouveau mot de passe' : 'Mot de passe'}${mode !== 'login' ? ' <small>(8 caractères minimum)</small>' : ''}<input name="password" type="password" autocomplete="${mode === 'login' ? 'current-password' : 'new-password'}"></label>` : ''}
+      <button class="btn primary block" type="submit">${B[mode]}</button>
+      <div class="alt">${mode === 'login' ? '<button type="button" data-m="signup">Créer un compte</button><button type="button" data-m="forgot">Mot de passe oublié ?</button>'
+        : mode !== 'newpass' ? '<button type="button" data-m="login">← Retour à la connexion</button>' : ''}</div>
+    </form>
+    ${mode === 'signup' ? '<p class="sub" style="text-align:center;margin-top:12px">Ensuite, un responsable de l’agence active votre compte.</p>' : ''}
+  </div>`;
+  $('.alt').onclick = e => { const b = e.target.closest('[data-m]'); if (b) renderAuth(b.dataset.m); };
+  $('#authf').onsubmit = async e => {
+    e.preventDefault();
+    const fd = new FormData(e.target), btn = e.target.querySelector('[type=submit]');
+    const email = String(fd.get('email') || '').trim(), password = String(fd.get('password') || '');
+    ui.authEmail = email || ui.authEmail; ui.authNom = String(fd.get('nom') || '').trim() || ui.authNom;
+    btn.disabled = true;
+    try {
+      if (mode === 'login') {
+        const { data: r, error } = await sb.auth.signInWithPassword({ email, password }); if (error) throw error;
+        await startSession(r.user);
+      } else if (mode === 'signup') {
+        if (!ui.authNom) throw { message: 'Indiquez votre prénom et votre nom.' };
+        if (password.length < 8) throw { message: 'short' };
+        const { data: r, error } = await sb.auth.signUp({ email, password, options: { data: { nom: ui.authNom }, emailRedirectTo: appUrl() } });
+        if (error) throw error;
+        if (r.session) await startSession(r.user);
+        else renderAuth('login', '', 'Compte créé. Ouvrez l’email de confirmation que vous venez de recevoir, puis connectez-vous ici.');
+      } else if (mode === 'forgot') {
+        const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: appUrl() }); if (error) throw error;
+        renderAuth('login', '', 'Si un compte existe pour cet email, un lien pour changer le mot de passe vient d’être envoyé.');
+      } else {
+        if (password.length < 8) throw { message: 'short' };
+        const { error } = await sb.auth.updateUser({ password }); if (error) throw error;
+        toast('Mot de passe changé ✓');
+        const { data: { user } } = await sb.auth.getUser(); await startSession(user);
+      }
+    } catch (err) { renderAuth(mode, /^Indiquez/.test(err?.message) ? err.message : authErr(err)); }
+  };
+}
+function renderWait(kind) {
+  document.body.classList.add('auth'); setActionbar('');
+  const T = { pending: 'Compte en attente', off: 'Compte désactivé', setup: 'Serveur pas encore prêt', offline: 'Pas de connexion' };
+  const P = {
+    pending: 'Votre compte est créé. Un responsable de l’agence doit maintenant l’activer : Réglages → Équipe → choisir votre pôle. Appuyez ensuite sur « Réessayer ».',
+    off: 'Ce compte a été désactivé par un responsable de l’agence.',
+    setup: 'La base de données de l’agence n’est pas encore installée. Réessayez un peu plus tard.',
+    offline: 'Carnet n’arrive pas à joindre le serveur. Vérifiez votre connexion internet, puis réessayez.'
+  };
+  app.innerHTML = `<div class="authbox">
+    <div class="phead"><div class="ptile">${ico('users')}</div><div class="t"><h1>${T[kind]}</h1><p class="sub">${esc(Srv.me?.email || '')}</p></div></div>
+    <div class="card"><p style="margin:0 0 14px">${P[kind]}</p>
+      <div class="btnrow"><button class="btn primary" id="retry">Réessayer</button>${kind !== 'offline' || Srv.me ? '<button class="btn" id="out">Se déconnecter</button>' : ''}</div></div></div>`;
+  $('#retry').onclick = () => boot();
+  const out = $('#out'); if (out) out.onclick = logout;
+}
+async function startSession(user) {
+  if (!user) { renderAuth('login'); return; }
+  let me = null;
+  const { data: p, error } = await sb.from('profiles').select('*').eq('id', user.id).maybeSingle();
+  if (error) {
+    if (isNetErr(error)) me = lsGet(`carnet-me-${user.id}`, null);
+    if (!me) { Srv.me = { email: user.email }; renderWait(isNetErr(error) ? 'offline' : 'setup'); return; }
+  } else me = p;
+  if (!me) { Srv.me = { email: user.email }; renderWait('setup'); return; }
+  lsSet(`carnet-me-${user.id}`, me);
+  Srv.me = me;
+  if (!me.actif) { renderWait('off'); return; }
+  if (!me.pole) { renderWait('pending'); return; }
+
+  document.body.classList.remove('auth');
+  const saved = lsGet('carnet-pole', null);
+  ui.pole = isResp() && POLES[saved] ? saved : me.pole;
+  Srv.team = lsGet(`carnet-team-${me.id}`, []);
+  // Affichage immédiat depuis le téléphone, puis mise à jour depuis le serveur
+  const cache = lsGet(cacheKey(), null);
+  Srv.store.clear(); Srv.snap.clear();
+  if (cache) { for (const r of cache.rows || []) Srv.store.set(r.id, r); Srv.lastSync = cache.lastSync || ''; }
+  Srv.outbox = lsGet(outboxKey(), []);
+  for (const o of Srv.outbox) {
+    const r = Srv.store.get(o.id) || { id: o.id, owner: me.id, updated_at: '', updated_by: me.id };
+    Object.assign(r, { pole: o.pole, kind: o.kind, data: o.data, deleted: o.deleted });
+    Srv.store.set(o.id, r); o.data = r.data;
+  }
+  data = buildData(); applyTheme(); renderPoleSwitch(); setSync(Srv.outbox.length ? 'wait' : 'ok');
+  route();
+  try {
+    await Promise.all([pull(true), loadTeam()]);
+    Srv.loaded = true;
+    data = buildData(); ensureDefaults(); persist();
+    route(true);
+    setSync(Srv.outbox.length ? 'wait' : 'ok');
+  } catch (e) { setSync('off'); }
+  subscribe(); flush();
+}
+function renderPoleSwitch() {
+  const el = $('#polesw');
+  el.hidden = !isResp();
+  el.innerHTML = Object.entries(POLES).map(([k, l]) => `<button type="button" data-pole="${k}" class="${ui.pole === k ? 'on' : ''}">${l}</button>`).join('');
+  el.onclick = e => {
+    const b = e.target.closest('[data-pole]'); if (!b || b.dataset.pole === ui.pole) return;
+    ui.pole = b.dataset.pole; lsSet('carnet-pole', ui.pole);
+    resetUi(); data = buildData(); if (Srv.loaded) ensureDefaults();
+    renderPoleSwitch();
+    location.hash = `#/l/${POLE_COLS[ui.pole][0]}`;
+  };
+}
+async function logout() {
+  if (Srv.outbox.length && !confirm(`${plural(Srv.outbox.length, 'modification n’est', 'modifications ne sont')} pas encore envoyée(s) au serveur. Se déconnecter quand même ? Elle(s) sera(ont) perdue(s).`)) return;
+  if (Srv.me?.id) { try { localStorage.removeItem(cacheKey()); localStorage.removeItem(outboxKey()); } catch (e) {} }
+  if (Srv.channel) { sb.removeChannel(Srv.channel); Srv.channel = null; }
+  Object.assign(Srv, { me: null, team: [], outbox: [], lastSync: '', loaded: false });
+  Srv.store.clear(); Srv.snap.clear();
+  resetUi(); data = serverEmpty();
+  $('#polesw').hidden = true; setSync('ok');
+  await sb.auth.signOut().catch(() => {});
+  history.replaceState(null, '', appUrl());
+  renderAuth('login');
+}
+
+/* ---------- Fiches de l'ancienne version, sur ce téléphone ---------- */
+const localCount = () => localData ? ['acquereurs', 'vendeurs', 'biens', 'pige'].reduce((n, k) => n + (localData[k]?.length || 0), 0) : 0;
+const localToSend = () => SERVER && Srv.me?.id && ui.pole === 'vente' && !lsGet(`carnet-migre-${Srv.me.id}`, false) ? localCount() : 0;
+function migrateLocal() {
+  if (!importAjout(structuredClone(localData))) return;
+  lsSet(`carnet-migre-${Srv.me.id}`, true);
+}
+
+/* ---------- Réglages (serveur) ---------- */
+function renderReglagesServer() {
+  setSec('reg'); setActionbar('');
+  const me = Srv.me, th = data.theme || 'light';
+  const pending = Srv.outbox.length;
+  app.innerHTML = `
+    <div class="phead"><div class="ptile">${ico('gear')}</div><div class="t"><h1>Réglages</h1><p class="sub">Pôle ${POLES[ui.pole]}</p></div></div>
+    <div class="card"><div class="card-h">Mon compte</div>
+      <p class="sub" style="margin:0 0 4px"><b style="color:var(--text)">${esc(me.nom || me.email)}</b> · ${esc(me.email)}</p>
+      <p class="sub">${me.role === 'responsable' ? 'Responsable' : 'Agent'} · pôle ${POLES[me.pole]}<br>
+        ${pending ? `${plural(pending, 'modification attend', 'modifications attendent')} le réseau pour partir.` : 'Tout est enregistré sur le serveur ✓'}</p>
+      <button class="btn" id="out">Se déconnecter</button>
+    </div>
+    ${isResp() ? teamHTML() : ''}
+    <div class="card"><div class="card-h">Apparence</div>
+      <div class="seg" id="theme">${[['light', 'Clair'], ['dark', 'Sombre'], ['auto', 'Automatique']].map(([v, l]) => `<label><input type="radio" name="theme" value="${v}" ${th === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
+    </div>
+    <div class="card"><div class="card-h">Ma signature</div>
+      <p class="sub">Ajoutée à la fin de vos messages, à la place de {signature}. Chaque agent a la sienne.</p>
+      <textarea id="sig" rows="3" placeholder="Prénom Nom&#10;Agence&#10;06 …">${esc(data.signature)}</textarea>
+    </div>
+    <div class="card"><div class="card-h">Quartiers</div>
+      <p class="sub">Un quartier par ligne. Commun à tout le pôle ${POLES[ui.pole]}.</p>
+      <textarea id="qs" rows="7">${esc(data.quartiers.join('\n'))}</textarea>
+    </div>
+    <div class="savebar" style="position:static;background:none"><button class="btn primary" id="saveSet">Enregistrer</button></div>
+    ${localCount() && ui.pole === 'vente' ? `<div class="card"><div class="card-h">Fiches de l’ancienne version</div>
+      <p class="sub">Ce téléphone contient ${plural(localCount(), 'fiche', 'fiches')} enregistrées avant le passage au serveur.${lsGet(`carnet-migre-${me.id}`, false) ? ' Elles ont déjà été envoyées.' : ''}</p>
+      <button class="btn" id="migr2">${lsGet(`carnet-migre-${me.id}`, false) ? 'Les renvoyer (les doublons sont ignorés)' : 'Les envoyer sur le serveur'}</button></div>` : ''}
+    <div class="card"><div class="card-h">Importer</div>
+      <p class="sub">Ajoute les fiches d’un fichier Carnet (carnet papier recopié, ancienne sauvegarde). Rien n’est effacé, les doublons sont ignorés.</p>
+      <label class="btn" style="margin:0;color:var(--text);font-size:15px">Choisir un fichier<input type="file" id="imp" hidden></label>
+    </div>
+    ${isResp() ? `<div class="card"><div class="card-h">Exporter</div>
+      <p class="sub">Télécharge toutes les fiches du pôle ${POLES[ui.pole]} dans un fichier. Il contient des données personnelles : gardez-le en lieu sûr.</p>
+      <button class="btn" id="exp">Exporter</button></div>` : ''}
+    <div class="card"><div class="card-h">Mises à jour</div>
+      <p class="sub">Version ${APP_VERSION}. Carnet se met à jour tout seul à l’ouverture.</p>
+      <button class="btn" id="maj">Vérifier maintenant</button>
+    </div>`;
+  $('#out').onclick = logout;
+  $('#theme').onchange = e => { data.theme = e.target.value; applyTheme(); };
+  $('#maj').onclick = () => checkUpdate(true);
+  $('#imp').onchange = e => importFile(e.target.files[0]);
+  const m2 = $('#migr2'); if (m2) m2.onclick = migrateLocal;
+  $('#saveSet').onclick = async () => {
+    data.quartiers = [...new Set($('#qs').value.split('\n').map(s => s.trim()).filter(Boolean))];
+    save();
+    const sig = $('#sig').value.trim();
+    if (sig !== (me.signature || '')) {
+      const { error } = await sb.from('profiles').update({ signature: sig }).eq('id', me.id);
+      if (error) { toast(isNetErr(error) ? 'Pas de connexion : signature non enregistrée' : errMsg(error)); return; }
+      me.signature = sig; data.signature = sig; lsSet(`carnet-me-${me.id}`, me);
+    }
+    toast('Réglages enregistrés ✓');
+  };
+  const exp = $('#exp');
+  if (exp) exp.onclick = () => {
+    const out = { kind: 'carnet-ajout', source: `Export ${POLES[ui.pole]} du ${todayStr()}` };
+    for (const k of Object.keys(KINDS)) out[k] = data[k];
+    const blob = new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = `carnet-${ui.pole}-${todayStr()}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+  const team = $('#team');
+  if (team) team.onchange = async e => {
+    const li = e.target.closest('[data-id]'), k = e.target.dataset.k; if (!li || !k) return;
+    const id = li.dataset.id, val = k === 'actif' ? e.target.checked : (e.target.value || null);
+    if (id === me.id && ((k === 'role' && val !== 'responsable') || (k === 'actif' && !val) || k === 'pole')
+      && !confirm('Vous modifiez votre propre compte : vous pourriez perdre l’accès à certaines pages. Continuer ?')) { renderReglagesServer(); return; }
+    const { error } = await sb.from('profiles').update({ [k]: val }).eq('id', id);
+    if (error) { toast(isNetErr(error) ? 'Pas de connexion' : errMsg(error)); renderReglagesServer(); return; }
+    const p = Srv.team.find(x => x.id === id); if (p) p[k] = val;
+    toast('Équipe mise à jour ✓');
+    if (id === me.id) boot();
+  };
+}
+function teamHTML() {
+  const avatarOf = p => avatar('acq', { prenom: '', nom: p.nom || p.email }, 'sm');
+  const waiting = Srv.team.filter(p => !p.pole).length;
+  return `<div class="card"><div class="card-h">Équipe <span class="n">${Srv.team.length}</span></div>
+    <p class="sub">${waiting ? `<b style="color:var(--danger)">${plural(waiting, 'compte attend', 'comptes attendent')} d’être activé(s).</b> ` : ''}Choisissez le pôle d’un nouveau compte pour l’activer. Un compte sans pôle ne voit rien. Décochez « Actif » quand quelqu’un quitte l’agence.</p>
+    <ul class="team" id="team">${Srv.team.map(p => `<li data-id="${p.id}">
+      <div class="who2">${avatarOf(p)}<div><strong>${esc(p.nom || '—')}${p.id === Srv.me.id ? ' (vous)' : ''}</strong><small>${esc(p.email)}</small></div></div>
+      <div class="ctl">
+        <select data-k="pole" aria-label="Pôle"><option value="">À activer</option>${Object.entries(POLES).map(([k, l]) => `<option value="${k}" ${p.pole === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
+        <select data-k="role" aria-label="Rôle"><option value="agent" ${p.role === 'agent' ? 'selected' : ''}>Agent</option><option value="responsable" ${p.role === 'responsable' ? 'selected' : ''}>Responsable</option></select>
+        <label class="checkf"><input type="checkbox" data-k="actif" ${p.actif ? 'checked' : ''}>Actif</label>
+      </div></li>`).join('')}</ul></div>`;
+}
+
 /* ---------- Routeur ---------- */
-function route() {
+function route(keep) {
+  if (SERVER && !(Srv.me?.pole && Srv.me.actif)) return;
+  viewStale = false;
   const [page, a, b] = location.hash.replace(/^#\/?/, '').split('/');
+  const cols = activeCols();
   if (page !== 'l' && page !== 'envoi') ui.pick = page === 'messages' ? ui.pick : null;
-  if (page === 'l' && SEC[a]) renderList(a);
-  else if (page === 'e' && SEC[a] && b) renderFiche(a, b);
-  else if (page === 'envoi' && SEC[a]?.select) renderEnvoi(a);
+  if (page === 'l' && cols.includes(a)) renderList(a);
+  else if (page === 'e' && cols.includes(a) && b) renderFiche(a, b);
+  else if (page === 'envoi' && cols.includes(a) && SEC[a].select) renderEnvoi(a);
   else if (page === 'messages') renderMessages();
   else if (page === 'm' && a) renderModele(a);
   else if (page === 'reglages') renderReglages();
-  else if (page === 'a' && a) renderFiche('acq', a); // anciens liens
-  else renderList('acq');
+  else if (page === 'a' && a && cols.includes('acq')) renderFiche('acq', a); // anciens liens
+  else renderList(cols[0]);
+  if (keep === true) return;
   app.classList.remove('anim'); app.offsetHeight; app.classList.add('anim');
   window.scrollTo(0, 0);
 }
+async function boot() {
+  if (!SERVER) { route(); return; }
+  if (!sb) { renderWait('offline'); return; }
+  const { data: s, error } = await sb.auth.getSession();
+  if (error || !s.session) { renderAuth('login'); return; }
+  await startSession(s.session.user);
+}
 $('#gear').innerHTML = ico('gear');
-window.addEventListener('hashchange', route);
-route();
+window.addEventListener('hashchange', () => route());
+if (SERVER && sb) {
+  // Lien « mot de passe oublié » reçu par email
+  sb.auth.onAuthStateChange(ev => { if (ev === 'PASSWORD_RECOVERY') setTimeout(() => renderAuth('newpass'), 0); });
+  window.addEventListener('online', () => { if (Srv.me?.pole) flush(); });
+  setInterval(() => { if (Srv.me?.pole && Srv.outbox.length) flush(); }, 30000);
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState !== 'visible' || !Srv.me?.pole || !Srv.loaded) return;
+    flush();
+    try { onRemote(await pull(false)); } catch (e) { setSync('off'); }
+    if (viewStale) onRemote(['*']);
+  });
+}
+boot();
 
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 /* ---------- Mises à jour ---------- */
@@ -1331,7 +1975,9 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
 async function checkUpdate(manual) {
   try {
     const res = await fetch(`version.json?t=${Date.now()}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error("version introuvable");
     const { v } = await res.json();
+    if (!v) return;
     if (v === APP_VERSION) { if (manual) toast('Carnet est à jour ✓'); return; }
     let tried = null; try { tried = sessionStorage.getItem('carnet-maj'); } catch (e) {}
     if (tried === v && !manual) return; // déjà essayé : on ne boucle pas
