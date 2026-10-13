@@ -214,7 +214,7 @@ small{color:var(--muted);font-weight:400}
 .fld.full{grid-column:1/-1}
 .chips{display:flex;flex-wrap:wrap;gap:7px}
 .chip{margin:0;cursor:pointer;font-weight:400}
-.chip input{position:absolute;opacity:0;pointer-events:none}
+.chip input{position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;min-height:0;margin:0;padding:0}
 .chip span{display:inline-block;border:1.5px solid var(--line);border-radius:99px;padding:7px 14px;font-size:14px;font-weight:600;color:var(--text);background:var(--surface);transition:background .15s,color .15s,border-color .15s}
 .chip input:checked+span{background:var(--c);border-color:var(--c);color:var(--on-c)}
 .chip input:focus-visible+span{outline:2px solid var(--c);outline-offset:2px}
@@ -297,7 +297,8 @@ small{color:var(--muted);font-weight:400}
 .btnrow{display:flex;gap:8px;flex-wrap:wrap}
 .seg{display:flex;background:var(--surface-2);border-radius:12px;padding:3px}
 .seg label{flex:1;margin:0;text-align:center;cursor:pointer}
-.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg input{position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;min-height:0;margin:0;padding:0}
+.seg label,.chip{position:relative}
 .seg span{display:block;padding:8px 6px;border-radius:9px;font-size:14px;font-weight:600;color:var(--muted)}
 .seg input:checked+span{background:var(--surface);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.1)}
 .card p.sub{margin:0 0 12px}
@@ -330,7 +331,7 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const app = $('#app');
 const KEY = 'carnet-acquereurs-v1';
-const APP_VERSION = '9'; // À changer à chaque mise en ligne, avec version.json
+const APP_VERSION = '10'; // À changer à chaque mise en ligne, avec version.json
 const DAY = 86400000;
 
 /* ---------- Icônes ---------- */
@@ -622,6 +623,7 @@ const ui = {
     vend: { q: '', statut: '', sort: 'recent' }, bien: { q: '', statut: '', sort: 'recent' }, pige: { q: '', statut: '', sort: 'recent' }
   },
   sel: { acq: new Set(), vend: new Set(), pige: new Set() },
+  mode: 'tous', canal: 'SMS',
   sent: new Set(), pick: null, tplId: null, draft: null, subject: '', draftFor: null, bienId: ''
 };
 const SORTS = { nom: 'A → Z', recent: 'Récents', relance: 'Relance', prix: 'Prix' };
@@ -1030,10 +1032,9 @@ function renderEnvoi(col) {
     </div></section>
 
     <section class="step"><div class="stepn">3</div><div class="stepb">
-      <h2>Envoyez à chacun</h2>
-      <p class="sub">Appuyez sur <b>SMS</b>, <b>WhatsApp</b> ou <b>Email</b> : l’application s’ouvre avec le message déjà écrit. Envoyez-le, puis revenez ici pour la personne suivante.</p>
-      <div class="bar"><i id="barfill"></i></div><div class="sub" id="progress" style="margin:0"></div>
-      <ul class="recips" id="recips"></ul>
+      <h2>Envoyez</h2>
+      ${sel.length > 1 ? `<div class="seg" id="mode" style="margin-bottom:14px">${[['tous', 'Tous d’un coup'], ['un', 'Un par un']].map(([v, l]) => `<label><input type="radio" name="mode" value="${v}" ${ui.mode === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>` : ''}
+      <div id="step3"></div>
     </div></section>
     <button class="btn block" id="finish" style="margin-top:4px">J’ai terminé · tout désélectionner</button>`;
 
@@ -1043,58 +1044,101 @@ function renderEnvoi(col) {
     const had = ui.draft.includes('{bien}');
     ui.draft = e.target.value;
     if (had !== ui.draft.includes('{bien}')) { const pos = e.target.selectionStart; renderEnvoi(col); const ta = $('#draft'); ta.focus(); ta.selectionStart = ta.selectionEnd = pos; }
-    else renderRecips(col, sel, m);
+    else renderStep3(col, sel, m);
   };
   $('.ins').onclick = e => { const k = e.target.dataset.ins; if (k) insertAt($('#draft'), `{${k}}`); };
-  $('#subj').oninput = e => { ui.subject = e.target.value; renderRecips(col, sel, m); };
+  $('#subj').oninput = e => { ui.subject = e.target.value; renderStep3(col, sel, m); };
   $('#finish').onclick = () => { ui.sel[col].clear(); ui.sent.clear(); ui.bienId = ''; ui.pick = null; location.hash = `#/l/${col}`; };
-  $('#recips').onclick = e => {
-    const el = e.target.closest('[data-via]'); if (!el) return;
-    const p = items(col).find(x => x.id === el.dataset.id); if (!p) return;
-    const body = fill(ui.draft, p, col);
-    if (el.dataset.via === 'copy') {
-      e.preventDefault();
-      (navigator.clipboard ? navigator.clipboard.writeText(body) : Promise.reject())
-        .then(() => toast('Message copié'), () => toast('Copie impossible sur cet appareil'));
+  const mode = $('#mode'); if (mode) mode.onchange = e => { ui.mode = e.target.value; renderStep3(col, sel, m); };
+  const copy = text => (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject())
+    .then(() => toast('Message copié'), () => toast('Copie impossible sur cet appareil'));
+  // Un seul gestionnaire pour la zone d'envoi et le bouton « suivant » en bas d'écran
+  const onSend = e => {
+    const el = e.target.closest('[data-via]');
+    if (!el) { const c = e.target.closest('[data-canal]'); if (c) { ui.canal = c.dataset.canal; renderStep3(col, sel, m); } return; }
+    if (el.dataset.via === 'copyall') { e.preventDefault(); copy(genericBody(col)); return; }
+    if (el.dataset.via === 'bulk') {
+      for (const p of sel.filter(p => p.email)) markSent(col, p, 'email groupé', m);
+      setTimeout(() => renderStep3(col, sel, m), 400);
       return;
     }
-    const k = `${col}:${p.id}`;
-    if (!ui.sent.has(k)) {
-      ui.sent.add(k);
-      p.lastContact = Date.now();
-      p.notes.unshift({ d: Date.now(), t: `Message « ${m.titre} » envoyé par ${el.dataset.via}` });
-      const b = data.biens.find(x => x.id === ui.bienId);
-      if (b && ui.draft.includes('{bien}')) b.notes.unshift({ d: Date.now(), t: `Présenté à ${S.name(p)} (${el.dataset.via})` });
-      save();
-    }
+    const p = items(col).find(x => x.id === el.dataset.id); if (!p) return;
+    if (el.dataset.via === 'copy') { e.preventDefault(); copy(fill(ui.draft, p, col)); return; }
+    markSent(col, p, el.dataset.via, m);
     // Laisse le lien s'ouvrir avant de redessiner
-    setTimeout(() => renderRecips(col, sel, m), 400);
+    setTimeout(() => renderStep3(col, sel, m), 400);
   };
-  renderRecips(col, sel, m);
+  $('#step3').onclick = onSend;
+  $('#actionbar').onclick = e => { if (location.hash.startsWith('#/envoi/')) onSend(e); };
+  renderStep3(col, sel, m);
 }
-function renderRecips(col, sel, m) {
+function markSent(col, p, via, m) {
+  const k = `${col}:${p.id}`;
+  if (ui.sent.has(k)) return;
+  ui.sent.add(k);
+  p.lastContact = Date.now();
+  p.notes.unshift({ d: Date.now(), t: `Message « ${m.titre} » envoyé par ${via}` });
+  const b = data.biens.find(x => x.id === ui.bienId);
+  if (b && ui.draft.includes('{bien}')) b.notes.unshift({ d: Date.now(), t: `Présenté à ${SEC[col].name(p)} (${via})` });
+  save();
+}
+// Version du message sans prénom, pour un envoi groupé (« Bonjour {prenom}, » → « Bonjour, »)
+function genericBody(col) {
+  return fill(ui.draft, { prenom: '', nom: '', quartiers: [], types: [] }, col).replace(/[ \t]+([,.!?])/g, '$1');
+}
+function renderStep3(col, sel, m) {
   const S = SEC[col];
   const isSent = p => ui.sent.has(`${col}:${p.id}`);
   const done = sel.filter(isSent).length;
-  const next = sel.find(p => !isSent(p));
-  $('#barfill').style.width = `${Math.round(done / sel.length * 100)}%`;
-  $('#progress').textContent = done === sel.length ? `Terminé : ${done} / ${sel.length} envoyés ✓` : `${done} / ${sel.length} envoyé${done > 1 ? 's' : ''}`;
-  $('#recips').innerHTML = sel.map(p => {
-    const body = fill(ui.draft, p, col);
-    const ls = links(p, body, fill(ui.subject, p, col));
-    const sent = isSent(p), isNext = p === next;
-    return `<li class="recip ${sent ? 'done' : ''} ${isNext ? 'next' : ''}">
-      <div class="rhead">${avatar(col, p, 'sm')}<strong>${esc(S.name(p))}</strong>${sent ? '<span class="ok">✓ Envoyé</span>' : isNext ? '<span class="nextl">À envoyer</span>' : ''}</div>
-      <details ${sel.length === 1 ? 'open' : ''}><summary>Voir le message</summary><div class="preview">${esc(body)}</div></details>
-      <div class="btnrow">
-        ${ls.map(l => `<a class="btn small ${sent ? '' : 'primary'}" href="${esc(l.href)}" data-id="${p.id}" data-via="${l.via}" ${l.blank ? 'target="_blank" rel="noopener"' : ''}>${ico(l.icon)}${l.via}</a>`).join('')}
-        <button class="btn small" data-id="${p.id}" data-via="copy">${ico('copy')}Copier</button>
-        ${ls.length ? '' : '<span class="sub" style="align-self:center;margin:0">Pas de téléphone ni d’email</span>'}
-      </div>
-    </li>`;
-  }).join('');
-}
+  const progress = `<div class="bar"><i style="width:${Math.round(done / sel.length * 100)}%"></i></div>
+    <div class="sub" style="margin:0 0 4px">${done === sel.length ? `Terminé : ${done} / ${sel.length} envoyés ✓` : `${done} / ${sel.length} envoyé${done > 1 ? 's' : ''}`}</div>`;
 
+  if (sel.length > 1 && ui.mode === 'tous') {
+    setActionbar('');
+    const avec = sel.filter(p => p.email), sans = sel.filter(p => !p.email);
+    const body = genericBody(col);
+    const href = `mailto:?bcc=${avec.map(p => encodeURIComponent(p.email)).join(',')}&subject=${encodeURIComponent(fill(ui.subject, { prenom: "", nom: "", quartiers: [], types: [] }, col))}&body=${encodeURIComponent(body)}`;
+    $('#step3').innerHTML = `
+      <p class="sub">Un seul email part à tout le monde, en <b>copie cachée</b> : personne ne voit les adresses des autres. Le prénom est remplacé par un « Bonjour » général.</p>
+      <details style="margin-bottom:12px"><summary class="sub" style="margin:0;cursor:pointer">Voir le message</summary><div class="preview">${esc(body)}</div></details>
+      ${avec.length ? `<a class="btn primary block" href="${esc(href)}" data-via="bulk">${ico('mail')}Envoyer l’email à ${plural(avec.length, 'personne', 'personnes')}</a>` : ''}
+      ${sans.length ? `<div class="warnbox" style="margin-top:12px"><b>${sans.length === sel.length ? 'Personne n’a d’email.' : `${plural(sans.length, 'personne n’a', 'personnes n’ont')} pas d’email :`}</b> ${sans.length === sel.length ? '' : esc(sans.slice(0, 6).map(p => S.name(p)).join(', ')) + (sans.length > 6 ? '…' : '') + '.'}
+        Passez sur <a href="#" data-mode-un>Un par un</a> pour leur envoyer un SMS, en un appui par personne.</div>` : ''}
+      <div class="hint" style="margin:12px 0 0">${ico('msg')}<span><b>WhatsApp :</b> copiez le message et collez-le dans une liste de diffusion (WhatsApp → Discussions → ⋯ → Nouvelle diffusion). Seuls ceux qui ont votre numéro enregistré le reçoivent.
+        <br><button class="btn small" data-via="copyall" style="margin-top:8px">${ico('copy')}Copier le message</button></span></div>
+      ${done ? progress : ''}`;
+    const un = $('[data-mode-un]', $('#step3'));
+    if (un) un.onclick = e => { e.preventDefault(); ui.mode = 'un'; renderEnvoi(col); };
+    return;
+  }
+
+  const next = sel.find(p => !isSent(p) && links(p, '', '').length);
+  const pick = p => { const ls = links(p, fill(ui.draft, p, col), fill(ui.subject, p, col)); return ls.find(l => l.via === ui.canal) || ls[0]; };
+  $('#step3').innerHTML = `
+    ${sel.length > 1 ? `<p class="sub">Chaque message est personnalisé avec le prénom. Appuyez sur le <b>bouton en bas de l’écran</b> : le message de la personne suivante s’ouvre. Envoyez-le, revenez ici, appuyez encore.</p>
+      <div class="lbl">Envoyer par</div>
+      <div class="tplpick">${['SMS', 'WhatsApp', 'Email'].map(c => `<button type="button" data-canal="${c}" class="${ui.canal === c ? 'on' : ''}">${c}</button>`).join('')}</div>`
+      : '<p class="sub">Appuyez sur SMS, WhatsApp ou Email : l’application s’ouvre avec le message déjà écrit.</p>'}
+    ${progress}
+    <ul class="recips">${sel.map(p => {
+      const body = fill(ui.draft, p, col);
+      const ls = links(p, body, fill(ui.subject, p, col));
+      const sent = isSent(p), isNext = p === next;
+      return `<li class="recip ${sent ? 'done' : ''} ${isNext ? 'next' : ''}">
+        <div class="rhead">${avatar(col, p, 'sm')}<strong>${esc(S.name(p))}</strong>${sent ? '<span class="ok">✓ Envoyé</span>' : isNext ? '<span class="nextl">Suivant</span>' : ''}</div>
+        <details ${sel.length === 1 ? 'open' : ''}><summary>Voir le message</summary><div class="preview">${esc(body)}</div></details>
+        <div class="btnrow">
+          ${ls.map(l => `<a class="btn small ${sent ? '' : 'primary'}" href="${esc(l.href)}" data-id="${p.id}" data-via="${l.via}" ${l.blank ? 'target="_blank" rel="noopener"' : ''}>${ico(l.icon)}${l.via}</a>`).join('')}
+          <button class="btn small" data-id="${p.id}" data-via="copy">${ico('copy')}Copier</button>
+          ${ls.length ? '' : '<span class="sub" style="align-self:center;margin:0">Pas de téléphone ni d’email</span>'}
+        </div>
+      </li>`;
+    }).join('')}</ul>`;
+  if (sel.length > 1 && next) {
+    const l = pick(next);
+    setActionbar(`<span><strong>${done + 1}</strong> / ${sel.length}</span><a class="btn small" href="${esc(l.href)}" data-id="${next.id}" data-via="${l.via}" ${l.blank ? 'target="_blank" rel="noopener"' : ''}>${ico(l.icon)}${esc(next.prenom || S.name(next))} · ${l.via}</a>`);
+  } else setActionbar('');
+}
 /* ---------- Page Messages ---------- */
 function renderMessages() {
   setSec('msg'); setActionbar('');
