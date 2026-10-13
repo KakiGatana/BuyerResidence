@@ -239,6 +239,12 @@ small{color:var(--muted);font-weight:400}
 .mini a{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:12px;background:var(--surface-2);text-decoration:none;color:var(--text)}
 .mini a span:not(.av){flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
 .mini a small{flex:none}
+.ilist{list-style:none;margin:0 0 12px;padding:0;display:flex;flex-direction:column;gap:8px}
+.ilist li{display:flex;align-items:center;gap:6px;background:var(--surface-2);border-radius:12px;padding:5px 4px 5px 12px}
+.ilist a{flex:1;min-width:0;font-weight:600;font-size:15px;text-decoration:none;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ilist select{width:auto;flex:none;min-height:36px;padding:4px 28px 4px 10px;font-size:13.5px;font-weight:600;background-color:var(--surface);background-position:right 9px center}
+.ilist button{background:none;border:0;font-size:22px;line-height:1;color:var(--muted);cursor:pointer;padding:0 6px}
+.meta b{color:var(--c);font-weight:700}
 
 /* ---------- Messages ---------- */
 .howto{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px}
@@ -403,6 +409,11 @@ const SOURCES = ['Leboncoin', 'SeLoger', 'PAP', "Bien'ici", 'Panneau', 'Autre'];
 const MANDATS = ['Simple', 'Exclusif', 'Semi-exclusif'];
 const DPE = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
 const OLD_TYPES = { Studio: 1, T2: 2, T3: 3, T4: 4, 'T5+': 5 };
+const QUARTIERS = ['Vélizy-Bas (Village)', 'Mozart', 'Europe', 'Louvois', 'Le Clos', 'Les Aviateurs', 'Pointe Ouest', 'Vélizy-Haut', 'Viroflay', 'Chaville', 'Jouy-en-Josas', 'Bièvres', 'Meudon'];
+// Où en est un acquéreur avec un bien donné
+const ETAPES = [{ k: 'demande', l: 'A demandé', c: 'blue' }, { k: 'propose', l: 'Proposé', c: 'grey' }, { k: 'visite', l: 'Visité', c: 'violet' },
+  { k: 'offre', l: 'Offre', c: 'amber' }, { k: 'achat', l: 'A acheté', c: 'green' }, { k: 'non', l: 'Pas intéressé', c: 'grey' }];
+const etape = k => ETAPES.find(e => e.k === k) || ETAPES[0];
 const quartiers = () => data.quartiers;
 
 /* ---------- Données ---------- */
@@ -415,8 +426,8 @@ const TPL = {
 };
 function defaults() {
   return {
-    version: 2, theme: 'light', signature: '', lastExport: 0,
-    quartiers: ['Vélizy-Bas (Village)', 'Mozart', 'Europe', 'Louvois', 'Le Clos', 'Pointe Ouest', 'Vélizy-Haut'],
+    version: 3, theme: 'light', signature: '', lastExport: 0,
+    quartiers: [...QUARTIERS],
     acquereurs: [], vendeurs: [], biens: [], pige: [],
     modeles: Object.values(TPL).map(t => ({ id: uid(), ...t }))
   };
@@ -424,7 +435,7 @@ function defaults() {
 function migrate(d) {
   for (const k of ['acquereurs', 'vendeurs', 'biens', 'pige']) if (!Array.isArray(d[k])) d[k] = [];
   for (const a of d.acquereurs) {
-    a.profil ??= []; a.provenance ??= ''; a.chambresMin ??= null;
+    a.profil ??= []; a.provenance ??= ''; a.chambresMin ??= null; a.interets ??= []; a.rdv ??= '';
     if (a.piecesMin === undefined) {
       const ps = a.types.filter(t => t in OLD_TYPES).map(t => OLD_TYPES[t]);
       a.piecesMin = ps.length ? Math.min(...ps) : null;
@@ -435,6 +446,12 @@ function migrate(d) {
     for (const m of d.modeles) m.texte = m.texte.replace('[décrire le bien]', '{bien}').replace('[détails]', '{bien}');
     for (const t of [TPL.vendeur, TPL.pige]) if (!d.modeles.some(m => m.titre === t.titre)) d.modeles.push({ id: uid(), ...t });
     d.version = 2;
+  }
+  for (const b of d.biens) b.nom ??= '';
+  if (d.version < 3) {
+    // Quartier des Aviateurs et communes voisines (vus dans le carnet papier)
+    for (const q of QUARTIERS) if (!d.quartiers.includes(q)) d.quartiers.push(q);
+    d.version = 3;
   }
   return d;
 }
@@ -464,7 +481,17 @@ const CLOSED = { vend: ['mandat', 'non'], pige: ['mandat', 'refus'] };
 const aRelancer = (col, it) => !!it.relance && it.relance <= todayStr() && !(CLOSED[col] || []).includes(it.statut);
 const relanceMeta = (col, it) => it.relance ? (aRelancer(col, it) ? `<span class="late">À relancer (${fmtDay(it.relance)})</span>` : `Relance le ${fmtDay(it.relance)}`) : '';
 const joinMeta = (...p) => p.filter(Boolean).join(' · ');
-function bienName(b) { return `${b.type || 'Bien'}${b.pieces ? ` ${b.pieces} p.` : ''}${b.surface ? ` · ${b.surface} m²` : ''}`; }
+function bienName(b) {
+  if (b.nom) return `${b.nom}${b.type ? ` · ${b.type}` : ''}${b.pieces ? ` ${b.pieces} p.` : ''}`;
+  return `${b.type || 'Bien'}${b.pieces ? ` ${b.pieces} p.` : ''}${b.surface ? ` · ${b.surface} m²` : ''}`;
+}
+const bienById = id => data.biens.find(b => b.id === id);
+const interesses = b => data.acquereurs.filter(a => a.interets.some(x => x.b === b.id));
+function fmtRdv(s) {
+  const d = new Date(s); if (isNaN(d)) return '';
+  return d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' }) + ' à ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+}
+const rdvAVenir = a => a.rdv && new Date(a.rdv) >= new Date(new Date().setHours(0, 0, 0, 0));
 function bienDesc(b) {
   if (b.description) return b.description;
   const parts = [`${b.type || 'Bien'}${b.pieces ? ` de ${b.pieces} pièce${b.pieces > 1 ? 's' : ''}` : ''}`];
@@ -500,12 +527,13 @@ const SEC = {
         F('types', 'Type de bien', 'multi', { opts: TYPES }), F('quartiers', 'Quartiers', 'multi', { opts: quartiers, hint: 'aucun coché = tout Vélizy' }),
         F('criteres', 'Critères', 'multi', { opts: CRITERES }), F('autres', 'Autres critères', 'text', { ph: 'Proche école, dernier étage…' })] },
       { t: 'Situation', f: [F('profil', 'Profil', 'multi', { opts: PROFILS }), F('financement', 'Financement', 'text', { ph: 'Accord de prêt, apport…' }), F('provenance', 'Provenance', 'select', { opts: PROVENANCES })] },
-      { t: 'Statut', f: [F('statut', '', 'single', { req: 1 })] }
+      { t: 'Suivi', f: [F('statut', 'Statut', 'single', { req: 1 }), F('rdv', 'Prochain rendez-vous ou visite', 'datetime')] }
     ],
     row: a => ({
       tags: [...a.types.map(t => tag(t)), fmtPieces(a) && tag(fmtPieces(a)), a.budget && tag(fmtK(a.budget), 'b'),
-        a.profil.includes('Bien à vendre') && tag('Revente', 'w'), a.profil.includes('Investisseur') && tag('Investisseur', 'w')],
-      meta: joinMeta(esc(a.quartiers.length ? a.quartiers.join(', ') : 'Tout Vélizy'), a.lastContact && `contacté ${ago(a.lastContact)}`),
+        a.profil.includes('Bien à vendre') && tag('Revente', 'w'), a.profil.includes('Investisseur') && tag('Investisseur', 'w'),
+        ...a.interets.slice(0, 3).map(x => bienById(x.b) && tag(bienById(x.b).nom || bienName(bienById(x.b)), 'v'))],
+      meta: joinMeta(rdvAVenir(a) && `<b>RDV ${esc(fmtRdv(a.rdv))}</b>`, esc(a.quartiers.length ? a.quartiers.join(', ') : 'Tout Vélizy'), a.lastContact && `contacté ${ago(a.lastContact)}`),
       pill: a.statut !== 'actif'
     })
   },
@@ -533,9 +561,9 @@ const SEC = {
     icon: 'key', person: false, select: false, sorts: ['recent', 'prix', 'nom'], searchPh: 'Adresse, n° de mandat, propriétaire…',
     statuts: [{ k: 'vente', l: 'En vente', c: 'blue' }, { k: 'offre', l: 'Sous offre', c: 'amber' }, { k: 'compromis', l: 'Compromis', c: 'violet' }, { k: 'vendu', l: 'Vendu', c: 'green' }, { k: 'retire', l: 'Retiré', c: 'grey' }],
     name: bienName,
-    valid: b => b.type || b.adresse || b.numero,
+    valid: b => b.nom || b.type || b.adresse || b.numero,
     sections: () => [
-      { t: 'Le bien', f: [F('type', 'Type', 'single', { opts: TYPES }), F('adresse', 'Adresse', 'text', { ph: 'N°, rue' }), F('quartier', 'Quartier', 'select', { opts: quartiers }),
+      { t: 'Le bien', f: [F('nom', 'Nom du dossier', 'text', { ph: 'Ex. nom du vendeur : Tordif, Charlet…' }), F('type', 'Type', 'single', { opts: TYPES }), F('adresse', 'Adresse', 'text', { ph: 'N°, rue' }), F('quartier', 'Quartier', 'select', { opts: quartiers }),
         F('pieces', 'Pièces', 'num', { max: 7, half: 1 }), F('chambres', 'Chambres', 'num', { max: 6, half: 1 }), F('surface', 'Surface habitable', 'number', { unit: 'm²', half: 1 }),
         F('terrain', 'Terrain', 'number', { unit: 'm²', half: 1 }), F('prix', 'Prix', 'number', { unit: 'k€', half: 1 }), F('dpe', 'DPE', 'select', { opts: DPE, half: 1 })] },
       { t: 'Mandat', f: [F('numero', 'N° de mandat', 'text', { half: 1 }), F('typeMandat', 'Type de mandat', 'select', { opts: MANDATS, half: 1 }),
@@ -580,7 +608,8 @@ function avatar(col, it, size = '') {
   if (col === 'bien' || (col === 'pige' && !it.nom)) return `<span class="av tile ${size}" aria-hidden="true">${ico(SEC[col].icon)}</span>`;
   const n = col === 'pige' ? it.nom : SEC[col].name(it);
   const w = String(n).replace(/^(M\.|Mme|Mr)\s+/i, '').split(/\s+/).filter(Boolean);
-  const ini = col === 'pige' ? (w[0] || '?')[0] : ((it.prenom || '')[0] || '') + ((it.nom || '')[0] || '') || (w[0] || '?')[0];
+  const nom = String(it.nom || '').replace(/^(M\.|Mme|Mr)\s+/i, '');
+  const ini = col === 'pige' ? (w[0] || '?')[0] : ((it.prenom || '')[0] || '') + (nom[0] || '') || (w[0] || '?')[0];
   let h = 0; for (const c of String(n)) h = (h * 31 + c.charCodeAt(0)) % 360;
   return `<span class="av ${size}" style="--h:${h}" aria-hidden="true">${esc(ini.toUpperCase())}</span>`;
 }
@@ -614,6 +643,12 @@ function setActionbar(html) {
 }
 
 /* ---------- Listes ---------- */
+// Tri par nom de famille (sans M. / Mme), puis prénom
+function sortKey(col, it) {
+  if (!SEC[col].person || col === 'pige') return SEC[col].name(it);
+  const nom = String(it.nom || '').replace(/^(M\.|Mme|Mr)\s+/i, '');
+  return `${nom || it.prenom || 'zzz'} ${it.prenom || ''}`;
+}
 function filtered(col) {
   const S = SEC[col], f = ui.f[col];
   const words = norm(f.q).split(/\s+/).filter(Boolean);
@@ -629,13 +664,14 @@ function filtered(col) {
     }
     if (words.length) {
       const vals = Object.values(it).flatMap(v => typeof v === 'string' || typeof v === 'number' ? [v] : Array.isArray(v) && typeof v[0] === 'string' ? v : []);
-      const hay = norm([...vals, telClean(it.tel), ...it.notes.map(n => n.t)].join(' '));
+      const biens = col === 'acq' ? it.interets.map(x => bienById(x.b)?.nom || '') : [];
+      const hay = norm([...vals, ...biens, telClean(it.tel), ...it.notes.map(n => n.t)].join(' '));
       if (!words.every(w => hay.includes(w))) return false;
     }
     return true;
   });
   const by = {
-    nom: (x, y) => S.name(x).localeCompare(S.name(y), 'fr'),
+    nom: (x, y) => sortKey(col, x).localeCompare(sortKey(col, y), 'fr'),
     recent: (x, y) => y.created - x.created,
     relance: (x, y) => (x.relance || '9999').localeCompare(y.relance || '9999'),
     prix: (x, y) => (x.prix || 0) - (y.prix || 0)
@@ -733,6 +769,7 @@ function updateCounts(col, list) {
 function blankOf(col) {
   const it = { id: uid(), notes: [], created: Date.now(), updated: Date.now(), lastContact: 0, statut: SEC[col].statuts[0].k };
   for (const s of SEC[col].sections()) for (const f of s.f) if (!(f.k in it)) it[f.k] = f.t === 'multi' ? [] : f.t === 'check' ? false : (f.t === 'number' || f.t === 'num') ? null : '';
+  if (col === 'acq') it.interets = [];
   return it;
 }
 function chip(type, name, val, checked, label, c) {
@@ -760,7 +797,7 @@ function fieldHTML(col, f, it) {
     case 'area':
       return `<label class="fld full">${lab}<textarea name="${f.k}" rows="${f.rows || 4}" placeholder="${esc(f.ph || '')}">${esc(v)}</textarea></label>`;
     default: {
-      const type = { number: 'number', tel: 'tel', email: 'email', url: 'url', date: 'date' }[f.t] || 'text';
+      const type = { number: 'number', tel: 'tel', email: 'email', url: 'url', date: 'date', datetime: 'datetime-local' }[f.t] || 'text';
       const extra = f.t === 'number' ? 'inputmode="decimal" min="0" step="any"' : f.t === 'tel' ? 'inputmode="tel"' : f.t === 'email' ? 'inputmode="email"' : '';
       return `<label class="fld ${cls}">${lab}<input name="${f.k}" type="${type}" ${extra} value="${esc(v ?? '')}" placeholder="${esc(f.ph || '')}"></label>`;
     }
@@ -800,6 +837,8 @@ function renderFiche(col, id) {
       <div class="sub">${isNew ? 'Remplissez ce que vous savez, le reste peut attendre.' : `${pillHTML(col, it)}${col === 'acq' && fmtPieces(it) ? ' ' + esc(fmtPieces(it)) : ''}`}</div>
     </div></div>
     ${acts.length ? `<div class="actions" id="acts">${acts.join('')}</div>` : ''}
+    ${col === 'acq' ? '<div class="card" id="intr"></div>' : ''}
+    ${col === 'bien' && !isNew ? interessesHTML(it) : ''}
     ${ms ? `<div class="card">
       <div class="card-h">Acquéreurs correspondants <span class="n">${ms.length}</span></div>
       ${ms.length ? `<ul class="mini">${ms.slice(0, 8).map(a => `<li><a href="#/e/acq/${a.id}">${avatar('acq', a, 'sm')}<span>${esc(SEC.acq.name(a))}</span><small>${esc(fmtK(a.budget) || '')}</small></a></li>`).join('')}</ul>
@@ -867,14 +906,62 @@ function renderFiche(col, id) {
       toast('Mandat créé ✓ Complétez-le'); location.hash = `#/e/bien/${bn.id}`;
     }
   };
-  const present = $('#present');
-  if (present) present.onclick = () => {
-    ui.sel.acq = new Set(ms.map(a => a.id)); ui.sent.clear();
+  const writeAbout = list => {
+    ui.sel.acq = new Set(list.map(a => a.id)); ui.sent.clear();
     ui.bienId = it.id;
     const t = data.modeles.find(m => m.texte.includes('{bien}')) || data.modeles[0];
     ui.tplId = t && t.id; ui.draftFor = null;
     location.hash = '#/envoi/acq';
   };
+  const present = $('#present');
+  if (present) present.onclick = () => writeAbout(ms);
+  const wi = $('#writeInt');
+  if (wi) wi.onclick = () => writeAbout(interesses(it).filter(a => a.statut !== 'achete'));
+  const intr = $('#intr');
+  if (intr) {
+    const draw = () => { intr.innerHTML = interetsHTML(it); };
+    const commit = () => { if (!isNew) save(); draw(); };
+    intr.onchange = e => {
+      const t = e.target;
+      if (t.dataset.et != null) { it.interets[Number(t.dataset.et)].e = t.value; commit(); }
+      else if (t.id === 'addb' && t.value) {
+        let id = t.value;
+        if (id === '__new') {
+          const nom = (prompt('Nom du dossier (ex. nom du vendeur) :') || '').trim();
+          if (!nom) { draw(); return; }
+          const b = Object.assign(blankOf('bien'), { nom });
+          b.notes.push({ d: Date.now(), t: `Créé depuis la fiche de ${SEC.acq.name(it)} : à compléter` });
+          data.biens.push(b); save(); id = b.id;
+        }
+        it.interets.push({ b: id, e: 'demande', d: Date.now() }); commit();
+      }
+    };
+    intr.onclick = e => { const i = e.target.dataset.rmi; if (i != null) { it.interets.splice(Number(i), 1); commit(); } };
+    draw();
+  }
+}
+function interetsHTML(a) {
+  const rest = data.biens.filter(b => !a.interets.some(x => x.b === b.id)).sort((x, y) => bienName(x).localeCompare(bienName(y), 'fr'));
+  const rows = a.interets.map((x, i) => {
+    const b = bienById(x.b); if (!b) return '';
+    return `<li><a href="#/e/bien/${b.id}">${esc(b.nom || bienName(b))}${b.prix ? ` <small>${fmtK(b.prix)}</small>` : ''}</a>
+      <select data-et="${i}" aria-label="Où en est-il avec ce bien">${ETAPES.map(e => `<option value="${e.k}" ${e.k === x.e ? 'selected' : ''}>${e.l}</option>`).join('')}</select>
+      <button type="button" data-rmi="${i}" aria-label="Retirer ce bien">×</button></li>`;
+  }).join('');
+  return `<div class="card-h">Biens demandés ou proposés ${a.interets.length ? `<span class="n">${a.interets.length}</span>` : ''}</div>
+    ${rows ? `<ul class="ilist">${rows}</ul>` : '<p class="sub" style="margin:0 0 12px">Les biens sur lesquels il a appelé, que vous lui avez proposés ou fait visiter.</p>'}
+    <select id="addb" aria-label="Ajouter un bien"><option value="">+ Ajouter un bien…</option>${rest.map(b => `<option value="${b.id}">${esc(bienName(b))}${b.prix ? ' · ' + fmtK(b.prix) : ''}</option>`).join('')}<option value="__new">Nouveau dossier…</option></select>`;
+}
+function interessesHTML(b) {
+  const list = interesses(b);
+  if (!list.length) return '';
+  const actifs = list.filter(a => a.statut !== 'achete').length;
+  return `<div class="card">
+    <div class="card-h">Ont demandé ou visité <span class="n">${list.length}</span></div>
+    <ul class="mini">${list.map(a => { const e = etape(a.interets.find(x => x.b === b.id).e); return `<li><a href="#/e/acq/${a.id}">${avatar('acq', a, 'sm')}<span>${esc(SEC.acq.name(a))}</span><small class="pill s-${e.c}">${e.l}</small></a></li>`; }).join('')}</ul>
+    ${actifs ? `<button class="btn primary block" id="writeInt">${ico('send')}Écrire à ${actifs > 1 ? `ces ${actifs} personnes` : 'cette personne'}</button>
+    <p class="sub" style="margin:8px 0 0;text-align:center">Pratique pour une baisse de prix ou une nouvelle info.</p>` : ''}
+  </div>`;
 }
 
 /* ---------- Envoi de messages ---------- */
@@ -1124,6 +1211,7 @@ function renderReglages() {
     const file = e.target.files[0]; if (!file) return;
     try {
       const d = JSON.parse(await file.text());
+      if (d.kind === 'carnet-ajout') { importAjout(d); return; }
       if (!Array.isArray(d.acquereurs) || !Array.isArray(d.modeles)) throw 0;
       if (!confirm('Remplacer les données de cet appareil par ce fichier ?')) return;
       d.version ??= 1; data = migrate(Object.assign(defaults(), d));
@@ -1135,6 +1223,28 @@ function renderReglages() {
     if (!confirm('Vraiment tout effacer ? Action définitive.')) return;
     data = defaults(); resetUi(); save(); applyTheme(); toast('Données effacées'); renderReglages();
   };
+}
+// Fichier « à ajouter » (ex. carnet papier recopié) : complète les fiches sans rien effacer.
+// Les doublons (même téléphone, même nom de dossier) sont ignorés : on peut l'importer deux fois sans risque.
+function importAjout(d) {
+  const A = d.acquereurs || [], B = d.biens || [], V = d.vendeurs || [];
+  if (!confirm(`Ajouter ${A.length} acquéreurs, ${B.length} biens et ${V.length} vendeurs à vos fiches ?\nRien de ce que vous avez déjà ne sera effacé.`)) return;
+  const idMap = {}; let n = 0, skip = 0;
+  for (const b of B) {
+    const ex = data.biens.find(x => x.nom && norm(x.nom) === norm(b.nom));
+    if (ex) { idMap[b.id] = ex.id; skip++; } else { data.biens.push(b); idMap[b.id] = b.id; n++; }
+  }
+  for (const [list, key] of [[A, 'acquereurs'], [V, 'vendeurs']]) {
+    const tels = new Set(data[key].map(x => telClean(x.tel)).filter(Boolean));
+    for (const x of list) {
+      if (x.tel && tels.has(telClean(x.tel))) { skip++; continue; }
+      if (x.interets) x.interets = x.interets.map(i => ({ ...i, b: idMap[i.b] || i.b }));
+      data[key].push(x); n++;
+    }
+  }
+  data = migrate(data); save();
+  toast(`${n} fiches ajoutées${skip ? `, ${skip} déjà présentes` : ''} ✓`);
+  renderReglages();
 }
 function resetUi() { for (const c in ui.sel) ui.sel[c].clear(); ui.sent.clear(); ui.draftFor = null; ui.bienId = ''; ui.pick = null; }
 
