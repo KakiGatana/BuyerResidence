@@ -106,11 +106,15 @@ small{color:var(--muted);font-weight:400}
 .search svg{position:absolute;left:13px;top:50%;transform:translateY(-50%);width:18px;height:18px;color:var(--muted);pointer-events:none}
 .search input{padding-left:40px;background-color:var(--surface);border-color:var(--line)}
 .search input:focus{border-color:var(--accent)}
-.filters{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.filters{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.sortsel{width:auto;min-height:0;padding:2px 22px 2px 4px;border:0;background-color:transparent;background-position:right 4px center;font-size:14px;font-weight:600;color:var(--text)}
+.sortsel:focus{background-color:transparent}
+@media (max-width:400px){.cw{display:none}.selrow .btn.link{padding-left:6px;padding-right:6px}}
+.tag.w{background:var(--warn-soft);color:var(--warn)}
 .filters select,.filters input{font-size:14px;min-height:40px;padding-top:8px;padding-bottom:8px;background-color:var(--surface);border-color:var(--line);border-radius:10px}
 .filters .on{border-color:var(--accent);color:var(--accent);font-weight:600}
 @media (max-width:560px){.filters{grid-template-columns:1fr 1fr}}
-.selrow{display:flex;align-items:center;gap:2px;margin:8px 0 8px;flex-wrap:wrap}
+.selrow{display:flex;align-items:center;gap:2px;margin:8px 0 8px}
 .selrow .count{margin-right:auto;color:var(--muted);font-size:14px}
 .list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
 .row{display:flex;align-items:center;background:var(--surface);border:1.5px solid transparent;border-radius:var(--radius);box-shadow:var(--shadow);transition:background .15s,border-color .15s;animation:fadeIn .2s ease both}
@@ -228,8 +232,11 @@ small{color:var(--muted);font-weight:400}
 const $ = (s, r = document) => r.querySelector(s);
 const app = $('#app');
 const KEY = 'carnet-acquereurs-v1';
-const TYPES = ['Studio', 'T2', 'T3', 'T4', 'T5+', 'Maison'];
+const TYPES = ['Appartement', 'Maison', 'Terrain', 'Parking'];
 const CRITERES = ['Parking', 'Balcon / terrasse', 'Jardin', 'Ascenseur', 'Cave', 'Pas de RDC'];
+const PROFILS = ['Bien à vendre', 'Propriétaire', 'Investisseur', 'Primo-accédant'];
+const PROVENANCES = ['Vitrine / agence', 'Site / portail', 'Téléphone', 'Recommandation', 'Ancien client', 'Porte à porte', 'Autre'];
+const OLD_TYPES = { Studio: 1, T2: 2, T3: 3, T4: 4, 'T5+': 5 };
 const STATUTS = { actif: 'Actif', pause: 'En pause', achete: 'A acheté' };
 const PLACEHOLDERS = ['prenom', 'nom', 'quartiers', 'types', 'budget', 'signature'];
 const DAY = 86400000;
@@ -270,9 +277,21 @@ function defaults() {
 function load() {
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) return Object.assign(defaults(), JSON.parse(raw));
+    if (raw) return migrate(Object.assign(defaults(), JSON.parse(raw)));
   } catch (e) {}
   return defaults();
+}
+// Fiches créées avec l'ancienne version (types Studio/T2/T3…) → type + pièces min
+function migrate(d) {
+  for (const a of d.acquereurs) {
+    a.profil ??= []; a.provenance ??= ''; a.chambresMin ??= null;
+    if (a.piecesMin === undefined) {
+      const ps = a.types.filter(t => t in OLD_TYPES).map(t => OLD_TYPES[t]);
+      a.piecesMin = ps.length ? Math.min(...ps) : null;
+      a.types = [...new Set(a.types.map(t => t in OLD_TYPES ? 'Appartement' : t))];
+    }
+  }
+  return d;
 }
 let data = load();
 function save() {
@@ -286,14 +305,19 @@ function applyTheme() {
   $('meta[name="theme-color"]').content = dark ? '#151513' : '#f7f5f0';
 }
 applyTheme();
-const ui = { q: '', fq: '', ft: '', fs: 'actif', fb: '', selected: new Set(), sent: new Set(), tplId: null, draft: null, subject: '', draftFor: null };
+const ui = { q: '', fq: '', ft: '', fp: '', fs: 'actif', fb: '', fpro: '', sort: 'nom', selected: new Set(), sent: new Set(), tplId: null, draft: null, subject: '', draftFor: null };
 
 /* ---------- Utilitaires ---------- */
 const fullName = a => [a.prenom, a.nom].filter(Boolean).join(' ') || 'Sans nom';
 const fmtBudget = k => k ? `${Number(k).toLocaleString('fr-FR')} k€` : '';
+const fmtPieces = a => [a.piecesMin ? `${a.piecesMin}${a.piecesMin >= 5 ? '+' : ''} p.` : '', a.chambresMin ? `${a.chambresMin}${a.chambresMin >= 4 ? '+' : ''} ch.` : ''].filter(Boolean).join(' / ');
 function summary(a) {
-  return [a.types.join(', '), fmtBudget(a.budget), a.quartiers.length ? a.quartiers.join(', ') : 'Tout Vélizy']
+  return [a.types.join(', '), fmtPieces(a), fmtBudget(a.budget), a.quartiers.length ? a.quartiers.join(', ') : 'Tout Vélizy']
     .filter(Boolean).join(' · ');
+}
+function numSelect(name, label, max, val) {
+  return `<label>${label}<select name="${name}"><option value="">Peu importe</option>${Array.from({ length: max }, (_, i) => i + 1)
+    .map(n => `<option value="${n}" ${val === n ? 'selected' : ''}>${n}${n === max ? ' et +' : ''}</option>`).join('')}</select></label>`;
 }
 function avatar(a, size = '') {
   const ini = ((a.prenom || '')[0] || '') + ((a.nom || '')[0] || '');
@@ -360,12 +384,16 @@ function filtered() {
     if (ui.fq && a.quartiers.length && !a.quartiers.includes(ui.fq)) return false;
     if (ui.ft && a.types.length && !a.types.includes(ui.ft)) return false;
     if (ui.fb && a.budget && a.budget < Number(ui.fb)) return false;
+    if (ui.fp && a.piecesMin && a.piecesMin > Number(ui.fp)) return false;
+    if (ui.fpro && !a.profil.includes(ui.fpro)) return false;
     if (words.length) {
-      const hay = norm([a.prenom, a.nom, a.tel, telClean(a.tel), a.email, a.autres, ...a.notes.map(n => n.t)].join(' '));
+      const hay = norm([a.prenom, a.nom, a.tel, telClean(a.tel), a.email, a.autres, a.provenance, a.financement, ...a.notes.map(n => n.t)].join(' '));
       if (!words.every(w => hay.includes(w))) return false;
     }
     return true;
-  }).sort((x, y) => (x.nom + ' ' + x.prenom).localeCompare(y.nom + ' ' + y.prenom, 'fr'));
+  }).sort(ui.sort === 'recent'
+    ? (x, y) => y.created - x.created
+    : (x, y) => (x.nom + ' ' + x.prenom).localeCompare(y.nom + ' ' + y.prenom, 'fr'));
 }
 
 function renderList() {
@@ -380,19 +408,21 @@ function renderList() {
       <div class="filters">
         <select id="fq" aria-label="Quartier"><option value="">Tous quartiers</option>${data.quartiers.map(q => `<option ${ui.fq === q ? 'selected' : ''}>${esc(q)}</option>`).join('')}</select>
         <select id="ft" aria-label="Type de bien"><option value="">Tous types</option>${TYPES.map(t => `<option ${ui.ft === t ? 'selected' : ''}>${t}</option>`).join('')}</select>
-        <select id="fs" aria-label="Statut"><option value="">Tous statuts</option>${Object.entries(STATUTS).map(([k, v]) => `<option value="${k}" ${ui.fs === k ? 'selected' : ''}>${k === 'actif' ? 'Actifs' : v}</option>`).join('')}</select>
         <input id="fb" type="number" inputmode="numeric" min="0" step="5" placeholder="Prix du bien (k€)" value="${esc(ui.fb)}" aria-label="Prix du bien en k€ : affiche les acquéreurs dont le budget suffit">
+        <select id="fp" aria-label="Pièces du bien : affiche les acquéreurs qui cherchent ce nombre de pièces ou moins"><option value="">Pièces du bien</option>${[1, 2, 3, 4, 5].map(n => `<option value="${n}" ${ui.fp == n ? 'selected' : ''}>${n}${n === 5 ? '+' : ''} pièce${n > 1 ? 's' : ''}</option>`).join('')}</select>
+        <select id="fpro" aria-label="Profil"><option value="">Tous profils</option>${PROFILS.map(p => `<option ${ui.fpro === p ? 'selected' : ''}>${p}</option>`).join('')}</select>
+        <select id="fs" aria-label="Statut"><option value="">Tous statuts</option>${Object.entries(STATUTS).map(([k, v]) => `<option value="${k}" ${ui.fs === k ? 'selected' : ''}>${k === 'actif' ? 'Actifs' : v}</option>`).join('')}</select>
       </div>
     </div>
     <div class="selrow">
-      <span class="count" id="count"></span>
+      <span class="count"><span id="count"></span> · <select id="sort" class="sortsel" aria-label="Trier"><option value="nom" ${ui.sort === 'nom' ? 'selected' : ''}>A → Z</option><option value="recent" ${ui.sort === 'recent' ? 'selected' : ''}>Récents</option></select></span>
       <button class="btn link small" id="selAll">Tout cocher</button>
       <button class="btn link small" id="selNone">Tout décocher</button>
     </div>
     <ul class="list" id="list"></ul>`;
 
   $('#q').oninput = e => { ui.q = e.target.value; renderItems(); };
-  for (const k of ['fq', 'ft', 'fs', 'fb']) $('#' + k).oninput = $('#' + k).onchange = e => { ui[k] = e.target.value; renderItems(); };
+  for (const k of ['fq', 'ft', 'fs', 'fb', 'fp', 'fpro', 'sort']) $('#' + k).oninput = $('#' + k).onchange = e => { ui[k] = e.target.value; renderItems(); };
   $('#selAll').onclick = () => { filtered().forEach(a => ui.selected.add(a.id)); renderItems(); };
   $('#selNone').onclick = () => { ui.selected.clear(); ui.sent.clear(); renderItems(); };
   $('#list').onchange = e => {
@@ -410,7 +440,7 @@ function renderList() {
 
 function renderItems() {
   const list = filtered();
-  for (const k of ['fq', 'ft', 'fb']) $('#' + k).classList.toggle('on', !!ui[k]);
+  for (const k of ['fq', 'ft', 'fb', 'fp', 'fpro']) $('#' + k).classList.toggle('on', !!ui[k]);
   $('#list').innerHTML = list.length ? list.map((a, i) => `
     <li class="row ${ui.selected.has(a.id) ? 'is-sel' : ''}" style="animation-delay:${Math.min(i, 12) * 25}ms">
       <label class="chk"><input type="checkbox" data-sel="${a.id}" ${ui.selected.has(a.id) ? 'checked' : ''} aria-label="Sélectionner ${esc(fullName(a))}"></label>
@@ -418,7 +448,7 @@ function renderItems() {
         ${avatar(a)}
         <span class="info">
           <span class="name">${esc(fullName(a))}${pill(a)}</span>
-          ${a.types.length || a.budget ? `<span class="tags">${a.types.map(t => `<span class="tag">${esc(t)}</span>`).join('')}${a.budget ? `<span class="tag b">${fmtBudget(a.budget)}</span>` : ''}</span>` : ''}
+          ${a.types.length || a.budget || fmtPieces(a) || a.profil.length ? `<span class="tags">${a.types.map(t => `<span class="tag">${esc(t)}</span>`).join('')}${fmtPieces(a) ? `<span class="tag">${fmtPieces(a)}</span>` : ''}${a.budget ? `<span class="tag b">${fmtBudget(a.budget)}</span>` : ''}${a.profil.includes('Bien à vendre') ? '<span class="tag w">Revente</span>' : ''}${a.profil.includes('Investisseur') ? '<span class="tag w">Invest.</span>' : ''}</span>` : ''}
           <span class="meta">${esc(a.quartiers.length ? a.quartiers.join(', ') : 'Tout Vélizy')}${a.lastContact ? ` · contacté ${ago(a.lastContact)}` : ''}</span>
         </span>
         ${ICON_CHEV}
@@ -431,7 +461,7 @@ function renderItems() {
 }
 function updateCounts(list) {
   const n = ui.selected.size;
-  $('#count').textContent = `${list.length} acquéreur${list.length > 1 ? 's' : ''}`;
+  $("#count").innerHTML = `${list.length}<span class="cw"> acquéreur${list.length > 1 ? "s" : ""}</span>`;
   $('#selAll').disabled = !list.length || list.every(a => ui.selected.has(a.id));
   $('#selNone').disabled = !n;
   setActionbar(n ? `<span><strong>${n}</strong> sélectionné${n > 1 ? 's' : ''}</span><a class="btn small" href="#/envoi">Envoyer un message →</a>` : '');
@@ -439,7 +469,7 @@ function updateCounts(list) {
 
 /* ---------- Fiche acquéreur ---------- */
 function blank() {
-  return { id: uid(), prenom: '', nom: '', tel: '', email: '', budget: null, surface: null, types: [], quartiers: [], criteres: [], autres: '', financement: '', statut: 'actif', notes: [], created: Date.now(), updated: Date.now(), lastContact: 0 };
+  return { id: uid(), prenom: '', nom: '', tel: '', email: '', budget: null, surface: null, piecesMin: null, chambresMin: null, types: [], quartiers: [], criteres: [], autres: '', financement: '', profil: [], provenance: '', statut: 'actif', notes: [], created: Date.now(), updated: Date.now(), lastContact: 0 };
 }
 function renderFiche(id) {
   const isNew = id === 'new';
@@ -469,6 +499,10 @@ function renderFiche(id) {
           <label>Budget max (k€)<input name="budget" type="number" inputmode="numeric" min="0" step="5" value="${a.budget ?? ''}"></label>
           <label>Surface min (m²)<input name="surface" type="number" inputmode="numeric" min="0" value="${a.surface ?? ''}"></label>
         </div>
+        <div class="grid2">
+          ${numSelect('piecesMin', 'Pièces min', 5, a.piecesMin)}
+          ${numSelect('chambresMin', 'Chambres min', 4, a.chambresMin)}
+        </div>
         <div class="lbl">Type de bien</div>
         <div class="chips">${chips('types', TYPES, a.types)}</div>
         <div class="lbl">Quartiers <small>· aucun coché = tout Vélizy</small></div>
@@ -476,7 +510,11 @@ function renderFiche(id) {
         <div class="lbl">Critères</div>
         <div class="chips">${chips('criteres', CRITERES, a.criteres)}</div>
         <label>Autres critères<input name="autres" value="${esc(a.autres)}" placeholder="Proche école, dernier étage…"></label>
-        <label>Financement<input name="financement" value="${esc(a.financement)}" placeholder="Accord de prêt, vente en cours…"></label>
+      </fieldset>
+      <fieldset><legend>Situation</legend>
+        <div class="chips">${chips('profil', PROFILS, a.profil)}</div>
+        <label>Financement<input name="financement" value="${esc(a.financement)}" placeholder="Accord de prêt, apport, vente en cours…"></label>
+        <label>Provenance<select name="provenance"><option value="">—</option>${[...new Set([...PROVENANCES, a.provenance].filter(Boolean))].map(p => `<option ${a.provenance === p ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select></label>
       </fieldset>
       <fieldset><legend>Suivi</legend>
         <label>Statut<select name="statut">${Object.entries(STATUTS).map(([k, v]) => `<option value="${k}" ${a.statut === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
@@ -504,8 +542,9 @@ function renderFiche(id) {
     Object.assign(a, {
       prenom: v('prenom'), nom: v('nom'), tel: v('tel'), email: v('email'),
       budget: v('budget') ? Number(v('budget')) : null, surface: v('surface') ? Number(v('surface')) : null,
-      types: fd.getAll('types'), quartiers: fd.getAll('quartiers'), criteres: fd.getAll('criteres'),
-      autres: v('autres'), financement: v('financement'), statut: v('statut') || 'actif', updated: Date.now()
+      piecesMin: v('piecesMin') ? Number(v('piecesMin')) : null, chambresMin: v('chambresMin') ? Number(v('chambresMin')) : null,
+      types: fd.getAll('types'), quartiers: fd.getAll('quartiers'), criteres: fd.getAll('criteres'), profil: fd.getAll('profil'),
+      autres: v('autres'), financement: v('financement'), provenance: v('provenance'), statut: v('statut') || 'actif', updated: Date.now()
     });
     if (v('newnote')) a.notes.unshift({ d: Date.now(), t: v('newnote') });
     if (isNew) data.acquereurs.push(a);
@@ -711,7 +750,7 @@ function renderReglages() {
       const d = JSON.parse(await file.text());
       if (!Array.isArray(d.acquereurs) || !Array.isArray(d.modeles)) throw 0;
       if (!confirm(`Remplacer les données de cet appareil par ce fichier (${d.acquereurs.length} acquéreurs) ?`)) return;
-      data = Object.assign(defaults(), d);
+      data = migrate(Object.assign(defaults(), d));
       ui.selected.clear(); ui.sent.clear(); ui.draftFor = null;
       save(); applyTheme(); toast('Données importées ✓'); renderReglages();
     } catch (err) { toast('Fichier de sauvegarde invalide'); }
