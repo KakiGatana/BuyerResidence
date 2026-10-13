@@ -330,7 +330,7 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const app = $('#app');
 const KEY = 'carnet-acquereurs-v1';
-const APP_VERSION = '8'; // À changer à chaque mise en ligne, avec version.json
+const APP_VERSION = '9'; // À changer à chaque mise en ligne, avec version.json
 const DAY = 86400000;
 
 /* ---------- Icônes ---------- */
@@ -718,6 +718,7 @@ function renderList(col) {
     $('#selNone').onclick = () => { ui.sel[col].clear(); renderItems(col); };
   }
   $('#list').onchange = e => {
+    if (e.target.classList.contains('impf')) { importFile(e.target.files[0]); return; }
     const id = e.target.dataset.sel; if (!id) return;
     e.target.checked ? ui.sel[col].add(id) : ui.sel[col].delete(id);
     e.target.closest('.row').classList.toggle('is-sel', e.target.checked);
@@ -753,7 +754,7 @@ function renderItems(col) {
     </li>`;
   }).join('')
     : all.length ? `<li class="empty"><strong>Aucun résultat</strong>Rien ne correspond à cette recherche ou à ces filtres.</li>`
-    : `<li class="empty"><div class="ptile">${ico(S.icon)}</div><strong>Aucun ${S.one} pour l’instant</strong>Ajoutez le premier, ça prend 30 secondes.<br><a class="btn primary" href="#/e/${col}/new">${ico('plus')}${S.neu}</a></li>`;
+    : `<li class="empty"><div class="ptile">${ico(S.icon)}</div><strong>Aucun ${S.one} pour l’instant</strong>Ajoutez le premier, ça prend 30 secondes.<br><a class="btn primary" href="#/e/${col}/new">${ico('plus')}${S.neu}</a>${col === 'acq' ? '<br><label class="btn" style="margin-top:10px">Importer un fichier (carnet, sauvegarde)<input type="file" class="impf" hidden></label>' : ''}</li>`;
   updateCounts(col, list);
 }
 function updateCounts(col, list) {
@@ -1185,7 +1186,7 @@ function renderReglages() {
       ${data.lastExport ? `<br>Dernière sauvegarde : ${new Date(data.lastExport).toLocaleDateString('fr-FR')}.` : '<br>Aucune sauvegarde pour l’instant.'}</p>
       <div class="btnrow">
         <button class="btn" id="exp">Exporter</button>
-        <label class="btn" style="margin:0;color:var(--text);font-size:15px">Importer<input type="file" id="imp" accept="application/json,.json" hidden></label>
+        <label class="btn" style="margin:0;color:var(--text);font-size:15px">Importer<input type="file" id="imp" hidden></label>
       </div>
     </div>
     <div class="card"><div class="card-h">Mises à jour</div>
@@ -1213,22 +1214,24 @@ function renderReglages() {
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     renderReglages();
   };
-  $('#imp').onchange = async e => {
-    const file = e.target.files[0]; if (!file) return;
-    try {
-      const d = JSON.parse(await file.text());
-      if (d.kind === 'carnet-ajout') { importAjout(d); return; }
-      if (!Array.isArray(d.acquereurs) || !Array.isArray(d.modeles)) throw 0;
-      if (!confirm('Remplacer les données de cet appareil par ce fichier ?')) return;
-      d.version ??= 1; data = migrate(Object.assign(defaults(), d));
-      resetUi(); save(); applyTheme(); toast('Données importées ✓'); renderReglages();
-    } catch (err) { toast('Fichier de sauvegarde invalide'); }
-  };
+  $('#imp').onchange = e => importFile(e.target.files[0]);
   $('#wipe').onclick = () => {
     if (!confirm('Tout effacer ? Pensez à exporter une sauvegarde avant.')) return;
     if (!confirm('Vraiment tout effacer ? Action définitive.')) return;
     data = defaults(); resetUi(); save(); applyTheme(); toast('Données effacées'); renderReglages();
   };
+}
+// Sauvegarde complète (remplace tout) ou fichier « à ajouter » (complète)
+async function importFile(file) {
+  if (!file) return;
+  try {
+    const d = JSON.parse(await file.text());
+    if (d.kind === 'carnet-ajout') { importAjout(d); return; }
+    if (!Array.isArray(d.acquereurs) || !Array.isArray(d.modeles)) throw 0;
+    if (!confirm('Remplacer les données de cet appareil par ce fichier ?')) return;
+    d.version ??= 1; data = migrate(Object.assign(defaults(), d));
+    resetUi(); save(); applyTheme(); toast('Données importées ✓'); route();
+  } catch (err) { toast('Ce fichier n’est pas un fichier Carnet'); }
 }
 // Fichier « à ajouter » (ex. carnet papier recopié) : complète les fiches sans rien effacer.
 // Les doublons (même téléphone, même nom de dossier) sont ignorés : on peut l'importer deux fois sans risque.
@@ -1250,7 +1253,7 @@ function importAjout(d) {
   }
   data = migrate(data); save();
   toast(`${n} fiches ajoutées${skip ? `, ${skip} déjà présentes` : ''} ✓`);
-  renderReglages();
+  route();
 }
 function resetUi() { for (const c in ui.sel) ui.sel[c].clear(); ui.sent.clear(); ui.draftFor = null; ui.bienId = ''; ui.pick = null; }
 
