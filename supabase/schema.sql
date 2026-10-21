@@ -1,5 +1,5 @@
 -- =====================================================================
--- Carnet : base de données de l'agence (version 2, sécurité renforcée)
+-- Carnet : base de données de l'agence (version 3 : lien d'invitation secret, limite d'écritures)
 -- À coller dans Supabase → SQL Editor → New query → Run.
 -- Installe une base neuve OU met à jour la version 1, sans perdre de données.
 -- Peut être relancé sans risque.
@@ -36,6 +36,20 @@ create table if not exists public.invitations (
   invite_par uuid default auth.uid() references public.profiles(id) on delete set null,
   created_at timestamptz not null default now()
 );
+-- Code secret du lien d'invitation : connaître l'email invité ne suffit pas pour prendre la place de quelqu'un.
+-- 64 caractères aléatoires, tirés par le serveur ; valable 7 jours, une seule fois.
+alter table public.invitations add column if not exists code text not null
+  default replace(gen_random_uuid()::text, '-', '') || replace(gen_random_uuid()::text, '-', '');
+
+-- ---------- Limite d'écritures par agent ----------
+-- Un compte piraté ne peut pas remplir la base en boucle (la base gratuite se bloque à 500 Mo).
+create table if not exists prive.quota (
+  uid     uuid not null,
+  fenetre timestamptz not null,
+  n       int not null default 0,
+  primary key (uid, fenetre)
+);
+revoke all on prive.quota from public, anon, authenticated;
 
 -- ---------- Toutes les fiches ----------
 create table if not exists public.fiches (
@@ -61,7 +75,7 @@ alter table public.fiches add constraint fiches_kind_connu
   check (kind in ('acq', 'vend', 'bien', 'pige', 'lcand', 'lbien', 'modele', 'reglages')) not valid;
 alter table public.fiches drop constraint if exists fiches_data_objet;
 alter table public.fiches add constraint fiches_data_objet
-  check (jsonb_typeof(data) = 'object' and octet_length(data::text) <= 200000) not valid;
+  check (jsonb_typeof(data) = 'object' and octet_length(data::text) <= 32000) not valid;
 do $$
 begin
   alter table public.fiches validate constraint fiches_id_format;
@@ -101,16 +115,38 @@ language sql stable security definer set search_path = '' as $$
 $$;
 
 -- ---------- Inscription : uniquement sur invitation ----------
+-- Il faut l'email invité ET le code secret du lien, et l'invitation doit avoir moins de 7 jours.
 -- Tant qu'aucun compte n'existe (première installation), la première inscription est libre.
 create or replace function prive.controle_inscription() returns trigger
 language plpgsql security definer set search_path = '' as $$
+declare
+  inv public.invitations;
 begin
-  if exists (select 1 from public.profiles)
-     and not exists (select 1 from public.invitations where email = lower(new.email)) then
-    raise exception 'inscription_refusee: % n''a pas été invité par l''agence', new.email;
+  if not exists (select 1 from public.profiles) then return new; end if;
+  select * into inv from public.invitations where email = lower(new.email);
+  if inv.email is null
+     or inv.created_at < now() - interval '7 days'
+     or inv.code is distinct from (new.raw_user_meta_data ->> 'code') then
+    raise exception 'inscription_refusee';
   end if;
+  -- Le code ne sert qu'une fois : il n'est pas gardé dans le compte
+  new.raw_user_meta_data := coalesce(new.raw_user_meta_data, '{}'::jsonb) - 'code';
   return new;
 end $$;
+
+-- Invitation : code, date et auteur fixés par le serveur
+create or replace function prive.garde_invitations() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  new.code       := replace(gen_random_uuid()::text, '-', '') || replace(gen_random_uuid()::text, '-', '');
+  new.created_at := now();
+  new.invite_par := auth.uid();
+  return new;
+end $$;
+
+drop trigger if exists garde_invitations on public.invitations;
+create trigger garde_invitations before insert on public.invitations
+  for each row execute function prive.garde_invitations();
 
 create or replace function prive.nouveau_compte() returns trigger
 language plpgsql security definer set search_path = '' as $$
@@ -161,7 +197,21 @@ create trigger garde_profils before update on public.profiles
 -- déplacer une fiche dans l'autre pôle, ni supprimer ou restaurer celle d'un collègue.
 create or replace function prive.garde_fiches() returns trigger
 language plpgsql security definer set search_path = '' as $$
+declare
+  nb int;
 begin
+  -- 600 écritures par tranche de 10 minutes et par agent : large pour un import ou un envoi groupé,
+  -- mais bloque un compte piraté qui écrirait en boucle.
+  if auth.uid() is not null then
+    insert into prive.quota as q (uid, fenetre, n)
+    values (auth.uid(), date_bin('10 minutes', now(), timestamptz '2000-01-01'), 1)
+    on conflict (uid, fenetre) do update set n = q.n + 1
+    returning n into nb;
+    if nb > 600 then
+      raise exception 'quota_depasse: trop de modifications en peu de temps';
+    end if;
+  end if;
+
   if tg_op = 'INSERT' then
     new.owner      := coalesce(auth.uid(), new.owner);
     new.updated_by := auth.uid();
@@ -308,6 +358,7 @@ begin
     delete from public.fiches where deleted and updated_at < now() - interval '30 days';
     delete from public.fiches_historique where remplace_le < now() - interval '60 days';
     delete from public.invitations where created_at < now() - interval '30 days';
+    delete from prive.quota where fenetre < now() - interval '1 day';
   $purge$);
 exception when others then raise notice 'Purge automatique non installée (pg_cron indisponible) : %', sqlerrm;
 end $$;

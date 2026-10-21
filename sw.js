@@ -1,6 +1,6 @@
 // Réseau d'abord, cache en secours : l'app marche hors connexion
 // et récupère toujours la dernière version quand il y a du réseau.
-const CACHE = 'carnet-v13';
+const CACHE = 'carnet-v14';
 const FILES = ['./', './index.html', './app.js', './theme.js', './manifest.webmanifest', './icon.svg', './fonts/fraunces-latin.woff2'];
 
 self.addEventListener('install', e => {
