@@ -31,10 +31,31 @@ et candidats / biens à louer (pôle Location), avec envoi de messages types (SM
 
 ## Fichiers
 
-- `index.html` : toute l'app
+- `index.html` : la page (sans JavaScript intégré, pour la règle de sécurité CSP)
+- `app.js` : toute l'app
+- `theme.js` : thème clair/sombre et protection contre l'affichage dans une autre page
+- `fonts/` : police Fraunces hébergée sur le site (licence SIL Open Font License)
 - `manifest.webmanifest`, `icon.svg` : installation sur l'écran d'accueil
 - `sw.js` : fonctionnement hors connexion
 - `version.json` : numéro de version, à changer avec `APP_VERSION` à chaque mise en ligne
+
+## Sécurité
+
+**Serveur (`supabase/schema.sql`)**
+- Inscription uniquement sur invitation d'un responsable (Réglages → Équipe) ; le compte reçoit directement son pôle et son rôle.
+- Règles ligne par ligne : chaque pôle ne lit que ses fiches ; les visiteurs non connectés n'ont accès à rien.
+- Auteur, dates, identifiant et type de fiche fixés par le serveur ; un agent ne peut ni changer de pôle, ni supprimer la fiche d'un collègue.
+- Contrôles sur les données : identifiant simple, type connu, taille limitée.
+- Historique de chaque modification (60 jours) et corbeille (30 jours), restaurables par un responsable ; purge automatique (RGPD).
+- Fonctions de sécurité dans un schéma privé, non exposé par l'API ; API GraphQL retirée.
+
+**Application**
+- Toute donnée venue du serveur ou d'un fichier est nettoyée avant affichage (types, identifiants, liens http(s) uniquement) puis échappée.
+- Règle CSP : seuls les fichiers du site et la bibliothèque Supabase s'exécutent ; les données ne partent que vers le serveur de l'agence.
+- Bibliothèque Supabase figée et vérifiée par empreinte (SRI) ; aucune ressource chargée chez Google.
+- Déconnexion ou compte désactivé : les fiches gardées sur le téléphone sont effacées.
+
+**À chaque mise en ligne** : ne jamais ajouter de `<script>` dans `index.html` (la CSP le bloquerait) ; si la version de supabase-js change, recalculer l'empreinte `integrity`.
 
 ## Installer sur le téléphone
 
