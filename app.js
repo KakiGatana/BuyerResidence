@@ -3,7 +3,7 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const app = $('#app');
 const KEY = 'carnet-acquereurs-v1';
-const APP_VERSION = '13'; // À changer à chaque mise en ligne, avec version.json
+const APP_VERSION = '14'; // À changer à chaque mise en ligne, avec version.json
 const DAY = 86400000;
 
 // Serveur de l'agence (Supabase). La clé « publishable » est faite pour être publique :
@@ -44,6 +44,8 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const norm = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const fmtK = k => k ? `${Number(k).toLocaleString('fr-FR')} k€` : '';
 const plural = (n, one, many) => `${n} ${n > 1 ? many : one}`;
+// Adresse email pour un lien mailto: : tout est encodé (« ? », « & »…) sauf l’arobase, pour que les messageries la lisent
+const mailAddr = e => encodeURIComponent(String(e || '').trim()).replace(/%40/g, '@');
 const telClean = t => String(t || '').replace(/[^\d+]/g, '');
 function telIntl(t) {
   let d = String(t || '').replace(/\D/g, '');
@@ -698,7 +700,8 @@ function renderFiche(col, id) {
   const acts = [];
   if (!isNew) {
     if (it.tel) acts.push(`<a class="btn small soft" href="tel:${esc(telClean(it.tel))}">${ico('phone')}Appeler</a>`, `<a class="btn small soft" href="sms:${esc(telClean(it.tel))}">${ico('sms')}SMS</a>`, `<a class="btn small soft" href="https://wa.me/${telIntl(it.tel)}" target="_blank" rel="noopener">WhatsApp</a>`);
-    if (it.email) acts.push(`<a class="btn small soft" href="mailto:${esc(it.email)}">${ico('mail')}Email</a>`);
+    // Adresse encodée : un collègue ne peut pas glisser « ?bcc=… » pour recevoir une copie des emails
+    if (it.email) acts.push(`<a class="btn small soft" href="mailto:${esc(mailAddr(it.email))}">${ico('mail')}Email</a>`);
     if (col === 'pige' && safeUrl(it.lien)) acts.push(`<a class="btn small soft" href="${esc(safeUrl(it.lien))}" target="_blank" rel="noopener noreferrer">${ico('ext')}Voir l’annonce</a>`);
     if ((col === 'bien' || col === 'lbien') && it.proprioTel) acts.push(`<a class="btn small soft" href="tel:${esc(telClean(it.proprioTel))}">${ico('phone')}Appeler le propriétaire</a>`);
     if (col === 'pige') acts.push(`<button class="btn small" data-conv="vend">${ico('arrow')}En faire un prospect vendeur</button>`);
@@ -889,7 +892,7 @@ function links(p, body, subject) {
     out.push({ via: 'SMS', icon: 'sms', href: `sms:${telClean(p.tel)}?&body=${encodeURIComponent(body)}` });
     out.push({ via: 'WhatsApp', icon: 'msg', href: `https://wa.me/${telIntl(p.tel)}?text=${encodeURIComponent(body)}`, blank: true });
   }
-  if (p.email) out.push({ via: 'Email', icon: 'mail', href: `mailto:${encodeURIComponent(p.email)}?subject=${encodeURIComponent(subject || '')}&body=${encodeURIComponent(body)}` });
+  if (p.email) out.push({ via: 'Email', icon: 'mail', href: `mailto:${mailAddr(p.email)}?subject=${encodeURIComponent(subject || '')}&body=${encodeURIComponent(body)}` });
   return out;
 }
 const INSERTS = [['prenom', 'Prénom'], ['bien', 'Le bien'], ['signature', 'Signature']];
@@ -1002,7 +1005,7 @@ function renderStep3(col, sel, m) {
     setActionbar('');
     const avec = sel.filter(p => p.email), sans = sel.filter(p => !p.email);
     const body = genericBody(col);
-    const href = `mailto:?bcc=${avec.map(p => encodeURIComponent(p.email)).join(',')}&subject=${encodeURIComponent(fill(ui.subject, { prenom: "", nom: "", quartiers: [], types: [] }, col))}&body=${encodeURIComponent(body)}`;
+    const href = `mailto:?bcc=${avec.map(p => mailAddr(p.email)).join(',')}&subject=${encodeURIComponent(fill(ui.subject, { prenom: "", nom: "", quartiers: [], types: [] }, col))}&body=${encodeURIComponent(body)}`;
     $('#step3').innerHTML = `
       <p class="sub">Un seul email part à tout le monde, en <b>copie cachée</b> : personne ne voit les adresses des autres. Le prénom est remplacé par un « Bonjour » général.</p>
       <details style="margin-bottom:12px"><summary class="sub" style="margin:0;cursor:pointer">Voir le message</summary><div class="preview">${esc(body)}</div></details>
@@ -1033,8 +1036,8 @@ function renderStep3(col, sel, m) {
         <div class="rhead">${avatar(col, p, 'sm')}<strong>${esc(S.name(p))}</strong>${sent ? '<span class="ok">✓ Envoyé</span>' : isNext ? '<span class="nextl">Suivant</span>' : ''}</div>
         <details ${sel.length === 1 ? 'open' : ''}><summary>Voir le message</summary><div class="preview">${esc(body)}</div></details>
         <div class="btnrow">
-          ${ls.map(l => `<a class="btn small ${sent ? '' : 'primary'}" href="${esc(l.href)}" data-id="${p.id}" data-via="${l.via}" ${l.blank ? 'target="_blank" rel="noopener"' : ''}>${ico(l.icon)}${l.via}</a>`).join('')}
-          <button class="btn small" data-id="${p.id}" data-via="copy">${ico('copy')}Copier</button>
+          ${ls.map(l => `<a class="btn small ${sent ? '' : 'primary'}" href="${esc(l.href)}" data-id="${esc(p.id)}" data-via="${l.via}" ${l.blank ? 'target="_blank" rel="noopener"' : ''}>${ico(l.icon)}${l.via}</a>`).join('')}
+          <button class="btn small" data-id="${esc(p.id)}" data-via="copy">${ico('copy')}Copier</button>
           ${ls.length ? '' : '<span class="sub" style="align-self:center;margin:0">Pas de téléphone ni d’email</span>'}
         </div>
       </li>`;
@@ -1241,6 +1244,7 @@ const memberName = id => { const p = Srv.team.find(x => x.id === id); return p ?
 function lsGet(k, def) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : def; } catch (e) { return def; } }
 function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
 const isNetErr = e => !e || !e.code || /fetch|network|load failed/i.test(e.message || '');
+const isQuota = e => /quota_depasse/.test(e?.message || '');
 function errMsg(e) {
   const m = e?.message || '';
   if (/supprimer ou la restaurer/.test(m)) return 'Seul un responsable ou l’auteur de la fiche peut la supprimer';
@@ -1330,12 +1334,18 @@ async function flush() {
     while (Srv.outbox.length && !offline) {
       const batch = Srv.outbox.slice(0, 100);
       const { data: rows, error } = await sb.from('fiches').upsert(batch.map(payload), { onConflict: 'id' }).select('id,owner,updated_at,updated_by');
-      if (!error) { batch.forEach(dropOutbox); written(rows); continue; }
+      if (!error) { batch.forEach(dropOutbox); written(rows); Srv.quotaWarned = false; continue; }
       if (isNetErr(error)) { offline = true; break; }
+      // Limite d'écritures du serveur : rien n'est perdu, la file repart dans quelques minutes
+      if (isQuota(error)) {
+        offline = true;
+        if (!Srv.quotaWarned) toast('Beaucoup de modifications d’un coup : la fin de l’envoi repart dans quelques minutes');
+        Srv.quotaWarned = true; break;
+      }
       // Une fiche refusée (droits) ne doit pas bloquer les autres : on les renvoie une par une
       for (const o of batch) {
         const { data: r2, error: e2 } = await sb.from('fiches').upsert(payload(o), { onConflict: 'id' }).select('id,owner,updated_at,updated_by');
-        if (e2 && isNetErr(e2)) { offline = true; break; }
+        if (e2 && (isNetErr(e2) || isQuota(e2))) { offline = true; break; }
         dropOutbox(o);
         if (e2) { toast(errMsg(e2)); await refetch(o.id); } else written(r2);
       }
@@ -1422,7 +1432,8 @@ function authErr(e) {
   const m = String(e?.message || '');
   if (m === 'short' || /at least|characters/i.test(m)) return 'Le mot de passe doit faire au moins 10 caractères.';
   if (/Invalid login/i.test(m)) return 'Email ou mot de passe incorrect.';
-  if (/inscription_refusee|Database error saving new user/i.test(m)) return 'Cet email n’a pas été invité par l’agence. Demandez à un responsable de vous inviter, puis utilisez exactement cette adresse.';
+  if (m === 'noinvite') return 'Pour créer un compte, ouvrez le lien d’invitation que l’agence vous a envoyé (SMS, WhatsApp ou email).';
+  if (/inscription_refusee|Database error saving new user/i.test(m)) return 'Inscription refusée. Utilisez exactement l’adresse email invitée, avec le dernier lien reçu (valable 7 jours). Sinon, demandez un nouveau lien à un responsable.';
   if (/not confirmed/i.test(m)) return 'Confirmez d’abord votre email (lien reçu par email), puis reconnectez-vous.';
   if (/already registered|already exists/i.test(m)) return 'Un compte existe déjà avec cet email : connectez-vous.';
   if (/rate limit|too many/i.test(m)) return 'Trop de tentatives : réessayez dans quelques minutes.';
@@ -1444,7 +1455,7 @@ function renderAuth(mode, msg = '', ok = '') {
       <div class="alt">${mode === 'login' ? '<button type="button" data-m="signup">Créer un compte</button><button type="button" data-m="forgot">Mot de passe oublié ?</button>'
         : mode !== 'newpass' ? '<button type="button" data-m="login">← Retour à la connexion</button>' : ''}</div>
     </form>
-    ${mode === 'signup' ? '<p class="sub" style="text-align:center;margin-top:12px">Utilisez l’adresse email à laquelle l’agence vous a invité.</p>' : ''}
+    ${mode === 'signup' ? `<p class="sub" style="text-align:center;margin-top:12px">${ui.invite ? 'Lien d’invitation reconnu ✓ Utilisez l’adresse email à laquelle l’agence vous a invité.' : 'Il faut le lien d’invitation envoyé par un responsable de l’agence.'}</p>` : ''}
   </div>`;
   $('.alt').onclick = e => { const b = e.target.closest('[data-m]'); if (b) renderAuth(b.dataset.m); };
   $('#authf').onsubmit = async e => {
@@ -1458,10 +1469,12 @@ function renderAuth(mode, msg = '', ok = '') {
         const { data: r, error } = await sb.auth.signInWithPassword({ email, password }); if (error) throw error;
         await startSession(r.user);
       } else if (mode === 'signup') {
+        if (!ui.invite) throw { message: 'noinvite' };
         if (!ui.authNom) throw { message: 'Indiquez votre prénom et votre nom.' };
         if (password.length < 10) throw { message: 'short' };
-        const { data: r, error } = await sb.auth.signUp({ email, password, options: { data: { nom: ui.authNom }, emailRedirectTo: appUrl() } });
+        const { data: r, error } = await sb.auth.signUp({ email, password, options: { data: { nom: ui.authNom, code: ui.invite }, emailRedirectTo: appUrl() } });
         if (error) throw error;
+        ui.invite = ''; try { sessionStorage.removeItem('carnet-invitation'); } catch (e) {}
         if (r.session) await startSession(r.user);
         else renderAuth('login', '', 'Compte créé. Ouvrez l’email de confirmation que vous venez de recevoir, puis connectez-vous ici.');
       } else if (mode === 'forgot') {
@@ -1687,14 +1700,20 @@ function teamHTML() {
     <ul class="team" id="invites" style="margin-top:14px"></ul>
   </div>`;
 }
-const EMAIL_RE = /^[^\s@<>"']+@[^\s@<>"']+\.[^\s@<>"']+$/;
+const EMAIL_RE = /^[^\s@<>"'?&]+@[^\s@<>"'?&]+\.[^\s@<>"'?&]+$/;
+// Lien d'invitation : code secret tiré par le serveur, valable 7 jours (voir schema.sql)
+const INVITE_RE = /^[0-9a-f]{64}$/;
+const INVITE_DAYS = 7;
 async function loadInvites() {
   const ul = $('#invites'); if (!ul) return;
-  const { data: inv, error } = await sb.from('invitations').select('email,pole,role,created_at').order('created_at', { ascending: false });
+  const { data: inv, error } = await sb.from('invitations').select('email,pole,role,code,created_at').order('created_at', { ascending: false });
   if (error) { ul.innerHTML = `<li class="sub">${isNetErr(error) ? 'Pas de connexion.' : 'Invitations indisponibles : le script schema.sql doit être relancé dans Supabase.'}</li>`; return; }
-  ul.innerHTML = (inv || []).filter(i => EMAIL_RE.test(i.email)).map(i => `<li data-email="${esc(i.email)}">
-    <div class="who2"><div><strong>${esc(i.email)}</strong><small>${POLES[i.pole] || ''} · ${i.role === 'responsable' ? 'Responsable' : 'Agent'} · pas encore inscrit</small></div></div>
-    <div class="btnrow"><button type="button" class="btn small primary" data-send>${ico('send')}Envoyer le lien</button><button type="button" class="btn small" data-del>Annuler</button></div></li>`).join('');
+  ul.innerHTML = (inv || []).filter(i => EMAIL_RE.test(i.email)).map(i => {
+    const fin = Date.parse(i.created_at) + INVITE_DAYS * DAY, expiree = !(fin > Date.now());
+    return `<li data-email="${esc(i.email)}" data-code="${expiree || !INVITE_RE.test(i.code || '') ? '' : esc(i.code)}">
+    <div class="who2"><div><strong>${esc(i.email)}</strong><small>${POLES[i.pole] || ''} · ${i.role === 'responsable' ? 'Responsable' : 'Agent'} · ${expiree ? '<b style="color:var(--danger)">lien expiré : annulez puis recréez l’invitation</b>' : `pas encore inscrit · lien valable jusqu’au ${esc(new Date(fin).toLocaleDateString('fr-FR'))}`}</small></div></div>
+    <div class="btnrow">${expiree ? '' : `<button type="button" class="btn small primary" data-send>${ico('send')}Envoyer le lien</button>`}<button type="button" class="btn small" data-del>Annuler</button></div></li>`;
+  }).join('');
 }
 function bindInvites() {
   const f = $('#invf'), ul = $('#invites'); if (!f) return;
@@ -1710,7 +1729,10 @@ function bindInvites() {
   ul.onclick = async e => {
     const li = e.target.closest('[data-email]'); if (!li) return;
     const email = li.dataset.email;
-    if (e.target.closest('[data-send]')) inviteAgent(email);
+    if (e.target.closest('[data-send]')) {
+      if (!li.dataset.code) { toast('Lien indisponible : le script schema.sql doit être relancé dans Supabase'); return; }
+      inviteAgent(email, li.dataset.code);
+    }
     else if (e.target.closest('[data-del]')) {
       if (!confirm(`Annuler l’invitation de ${email} ?`)) return;
       const { error } = await sb.from('invitations').delete().eq('email', email);
@@ -1750,10 +1772,10 @@ async function loadTrash() {
 }
 // Adresse publique de l'app (le lien envoyé aux agents, même si on teste en local)
 const PUBLIC_URL = 'https://kakigatana.github.io/BuyerResidence/';
-async function inviteAgent(email) {
-  const text = `Bonjour ! Voici Carnet, l'app de l'agence pour nos acquéreurs, vendeurs et mandats : ${PUBLIC_URL}\n\n`
-    + `1. Ouvre ce lien sur ton téléphone, appuie sur « Créer un compte » et utilise cette adresse : ${email}\n`
-    + `2. Ajoute-la à ton écran d'accueil :\n   - iPhone (Safari) : bouton Partager, puis « Sur l'écran d'accueil »\n   - Android (Chrome) : menu ⋮, puis « Installer l'application »\n`
+async function inviteAgent(email, code) {
+  const text = `Bonjour ! Voici Carnet, l'app de l'agence pour nos acquéreurs, vendeurs et mandats. Ton lien d'invitation (personnel, valable ${INVITE_DAYS} jours, ne le transfère pas) :\n${PUBLIC_URL}#invitation=${code}\n\n`
+    + `1. Ouvre ce lien sur ton téléphone et crée ton compte avec cette adresse : ${email}\n`
+    + `2. Ajoute ensuite Carnet à ton écran d'accueil, puis connecte-toi :\n   - iPhone (Safari) : bouton Partager, puis « Sur l'écran d'accueil »\n   - Android (Chrome) : menu ⋮, puis « Installer l'application »\n`
     + `Ton compte est activé dès l'inscription.\n\n${Srv.me?.nom || ''}`;
   try {
     if (navigator.share) { await navigator.share({ title: 'Carnet', text }); return; }
@@ -1781,12 +1803,24 @@ function route(keep) {
   app.classList.remove('anim'); app.offsetHeight; app.classList.add('anim');
   window.scrollTo(0, 0);
 }
+// Lien d'invitation (#invitation=…) : le code est gardé le temps de l'inscription et retiré de l'adresse affichée
+function readInvite() {
+  const m = location.hash.match(/^#invitation=([0-9a-f]{64})$/);
+  if (m) {
+    try { sessionStorage.setItem('carnet-invitation', m[1]); } catch (e) {}
+    history.replaceState(null, '', appUrl());
+  }
+  let code = m ? m[1] : '';
+  try { code = sessionStorage.getItem('carnet-invitation') || code; } catch (e) {}
+  return INVITE_RE.test(code) ? code : '';
+}
 async function boot() {
   if (!SERVER) { data = load(); applyTheme(); route(); return; }
   localData = load();
+  ui.invite = readInvite();
   if (!sb) { renderWait('offline'); return; }
   const { data: s, error } = await sb.auth.getSession();
-  if (error || !s.session) { renderAuth('login'); return; }
+  if (error || !s.session) { renderAuth(ui.invite ? 'signup' : 'login'); return; }
   await startSession(s.session.user);
 }
 $('#gear').innerHTML = ico('gear');
