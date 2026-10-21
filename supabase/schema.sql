@@ -274,6 +274,13 @@ revoke execute on all functions in schema prive from public, anon;
 grant execute on function prive.mon_pole(), prive.est_responsable() to authenticated;
 -- Toute future fonction du schéma public ne sera pas appelable par défaut
 alter default privileges in schema public revoke execute on functions from public, anon, authenticated;
+-- Fonction ajoutée par Supabase (RLS automatique sur les nouvelles tables) : réservée à la base, pas à l'API
+do $$
+begin
+  if to_regprocedure('public.rls_auto_enable()') is not null then
+    revoke execute on function public.rls_auto_enable() from public, anon, authenticated;
+  end if;
+end $$;
 
 -- ---------- Temps réel ----------
 do $$
