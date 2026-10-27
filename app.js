@@ -3,7 +3,7 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const app = $('#app');
 const KEY = 'carnet-acquereurs-v1';
-const APP_VERSION = '14'; // À changer à chaque mise en ligne, avec version.json
+const APP_VERSION = '15'; // À changer à chaque mise en ligne, avec version.json
 const DAY = 86400000;
 
 // Serveur de l'agence (Supabase). La clé « publishable » est faite pour être publique :
@@ -96,7 +96,9 @@ const DPE = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
 const OLD_TYPES = { Studio: 1, T2: 2, T3: 3, T4: 4, 'T5+': 5 };
 // Secteurs et résidences de Vélizy tels que dans ACTION, puis les communes voisines
 const QUARTIERS = ['Gare', 'Le Clos', 'Les Aviateurs', 'Le Mail', 'Louvois', 'Mairie', 'Mozart', 'Vélizy bas', 'Zone d’activité', 'Fronval', 'Exelmans',
-  'Viroflay', 'Chaville', 'Jouy-en-Josas', 'Bièvres', 'Meudon'];
+  'Viroflay', 'Chaville', 'Versailles', 'Jouy-en-Josas', 'Bièvres', 'Meudon', 'Clamart', 'Buc', 'Sèvres'];
+// Villes ajoutées en version 4 (ajoutées une seule fois aux listes existantes)
+const VILLES_V4 = ['Versailles', 'Clamart', 'Buc', 'Sèvres'];
 const RESIDENCES = ['Villa Azur', 'Parsifal', 'Meudon Velizy', 'L’Ursine', 'Les Ailes', 'Leclerc', 'Exelmans', 'La Ferme', 'Vélizy Village', 'Le Parc',
   'Les Tilleuls', 'Les Etangs', 'Dauphiné', 'Europe', 'Happy Vélizy', 'Harmonia', 'Vieille Eglise', 'Les Bois', 'Roussillon', 'Alizé', 'La Foret', 'Galilée', 'Mermoz'];
 // Anciens noms de quartiers (avant la liste ACTION) → nouveaux noms
@@ -143,7 +145,7 @@ const TPL_LOC = {
 const defaultTemplates = pole => Object.entries(pole === 'location' ? TPL_LOC : TPL).map(([k, t]) => ({ id: `tpl-${pole}-${k}`, ...t }));
 function defaults() {
   return {
-    version: 3, theme: 'light', signature: '', lastExport: 0,
+    version: 4, theme: 'light', signature: '', lastExport: 0,
     quartiers: [...QUARTIERS], residences: [...RESIDENCES],
     acquereurs: [], vendeurs: [], biens: [], pige: [], lcand: [], lbiens: [],
     modeles: Object.values(TPL).map(t => ({ id: uid(), ...t }))
@@ -227,9 +229,11 @@ function migrate(d) {
     for (const q of QUARTIERS) if (!d.quartiers.includes(q)) d.quartiers.push(q);
     d.version = 3;
   }
+  if (d.version < 4) { addVilles(d); d.version = 4; }
   cleanAll(d);
   return d;
 }
+function addVilles(d) { for (const q of VILLES_V4) if (!d.quartiers.includes(q)) d.quartiers.push(q); }
 function load() {
   try {
     const raw = localStorage.getItem(KEY);
@@ -328,10 +332,11 @@ const SEC = {
     valid: a => a.prenom || a.nom,
     sections: () => [
       { t: 'Contact', f: [F('prenom', 'Prénom', 'text', { half: 1 }), F('nom', 'Nom', 'text', { half: 1 }), F('tel', 'Téléphone', 'tel'), F('email', 'Email', 'email')] },
+      { t: 'Ce qu’il veut', hl: 1, f: [F('autres', '', 'area', { rows: 4, ph: 'Avec ses mots : maison avec jardin près des écoles, pas de travaux, dernier étage, proche RER…' })] },
       { t: 'Ce qu’il recherche', f: [F('budget', 'Budget max', 'number', { unit: 'k€', half: 1 }), F('surface', 'Surface min', 'number', { unit: 'm²', half: 1 }),
         F('piecesMin', 'Pièces min', 'num', { max: 5, any: 'Peu importe', half: 1 }), F('chambresMin', 'Chambres min', 'num', { max: 4, any: 'Peu importe', half: 1 }),
-        F('types', 'Type de bien', 'multi', { opts: TYPES }), F('quartiers', 'Secteurs', 'multi', { opts: quartiers, hint: 'aucun coché = tout Vélizy' }),
-        F('criteres', 'Critères', 'multi', { opts: CRITERES }), F('autres', 'Autres critères', 'text', { ph: 'Proche école, dernier étage…' })] },
+        F('types', 'Type de bien', 'multi', { opts: TYPES }), F('quartiers', 'Secteurs et villes', 'multi', { opts: quartiers, hint: 'aucun coché = tout le secteur' }),
+        F('criteres', 'Critères', 'multi', { opts: CRITERES })] },
       { t: 'Situation', f: [F('profil', 'Profil', 'multi', { opts: PROFILS }), F('financement', 'Financement', 'text', { ph: 'Accord de prêt, apport…' }), F('provenance', 'Provenance', 'select', { opts: PROVENANCES })] },
       { t: 'Suivi', f: [F('statut', 'Statut', 'single', { req: 1 }), F('rdv', 'Prochain rendez-vous ou visite', 'datetime')] }
     ],
@@ -339,6 +344,7 @@ const SEC = {
       tags: [...a.types.map(t => tag(t)), fmtPieces(a) && tag(fmtPieces(a)), a.budget && tag(fmtK(a.budget), 'b'),
         a.profil.includes('Bien à vendre') && tag('Revente', 'w'), a.profil.includes('Investisseur') && tag('Investisseur', 'w'),
         ...a.interets.slice(0, 3).map(x => bienById(x.b) && tag(bienById(x.b).nom || bienName(bienById(x.b)), 'v'))],
+      want: a.autres,
       meta: joinMeta(rdvAVenir(a) && `<b>RDV ${esc(fmtRdv(a.rdv))}</b>`, esc(a.quartiers.length ? a.quartiers.join(', ') : 'Tout Vélizy'), a.lastContact && `contacté ${ago(a.lastContact)}`),
       pill: a.statut !== 'actif'
     })
@@ -413,11 +419,11 @@ const SEC = {
     valid: c => c.prenom || c.nom,
     sections: () => [
       { t: 'Contact', f: [F('prenom', 'Prénom', 'text', { half: 1 }), F('nom', 'Nom', 'text', { half: 1 }), F('tel', 'Téléphone', 'tel'), F('email', 'Email', 'email')] },
+      { t: 'Ce qu’il veut', hl: 1, f: [F('autres', '', 'area', { rows: 4, ph: 'Avec ses mots : animaux, calme, proche RER, pas de rez-de-chaussée…' })] },
       { t: 'Ce qu’il recherche', f: [F('loyerMax', 'Loyer max charges comprises', 'number', { unit: '€', half: 1 }), F('entree', 'Entrée souhaitée', 'date', { half: 1 }),
         F('piecesMin', 'Pièces min', 'num', { max: 5, any: 'Peu importe', half: 1 }), F('surface', 'Surface min', 'number', { unit: 'm²', half: 1 }),
         F('types', 'Type de logement', 'multi', { opts: TYPES_LOC }), F('meuble', 'Meublé ?', 'single', { opts: MEUBLE_PREF }),
-        F('quartiers', 'Secteurs', 'multi', { opts: quartiers, hint: 'aucun coché = tout Vélizy' }), F('criteres', 'Critères', 'multi', { opts: CRITERES }),
-        F('autres', 'Autres critères', 'text', { ph: 'Animaux, proche RER…' })] },
+        F('quartiers', 'Secteurs et villes', 'multi', { opts: quartiers, hint: 'aucun coché = tout le secteur' }), F('criteres', 'Critères', 'multi', { opts: CRITERES })] },
       { t: 'Dossier', f: [F('situation', 'Situation', 'select', { opts: SITUATIONS, half: 1 }), F('revenus', 'Revenus nets / mois', 'number', { unit: '€', half: 1 }),
         F('garant', 'Garant', 'select', { opts: GARANTS, half: 1 }), F('occupants', 'Occupants', 'num', { max: 6, half: 1 }),
         F('dossierComplet', 'Dossier complet (toutes les pièces reçues)', 'check')] },
@@ -428,6 +434,7 @@ const SEC = {
         c.meuble && c.meuble !== 'Indifférent' && tag(c.meuble), c.dossierComplet && tag('Dossier complet', 'ok'),
         c.revenus && c.loyerMax && c.revenus < 3 * c.loyerMax && tag('Revenus < 3× loyer', 'w'),
         ...c.interets.slice(0, 3).map(x => bienById(x.b) && tag(bienById(x.b).nom || bienName(bienById(x.b)), 'v'))],
+      want: c.autres,
       meta: joinMeta(rdvAVenir(c) && `<b>RDV ${esc(fmtRdv(c.rdv))}</b>`, esc(c.quartiers.length ? c.quartiers.join(', ') : 'Tout Vélizy'),
         c.entree && `entrée le ${fmtDay(c.entree)}`, c.lastContact && `contacté ${ago(c.lastContact)}`),
       pill: c.statut !== 'recherche'
@@ -622,6 +629,7 @@ function renderItems(col) {
         <span class="info">
           <span class="name">${esc(S.name(it))}${r.pill ? pillHTML(col, it) : ''}</span>
           ${r.tags.filter(Boolean).length ? `<span class="tags">${r.tags.filter(Boolean).join('')}</span>` : ''}
+          ${r.want ? `<span class="wish">${esc(r.want)}</span>` : ''}
           ${r.meta ? `<span class="meta">${r.meta}</span>` : ''}
         </span>
         ${ico('chev', 'chev')}
@@ -733,7 +741,7 @@ function renderFiche(col, id) {
           : 'Aucun candidat en recherche ne correspond (loyer, type, quartier, pièces, meublé). Complétez le loyer, le type et le quartier pour affiner.'}</p>`}
     </div>` : ''}
     <form id="f" class="form" autocomplete="off" novalidate>
-      ${S.sections().map(s => `<fieldset class="card"><div class="card-h">${s.t}</div><div class="fgrid">${s.f.map(f => fieldHTML(col, f, it)).join('')}</div></fieldset>`).join('')}
+      ${S.sections().sort((x, y) => !!y.hl - !!x.hl).map(s => `<fieldset class="card${s.hl ? ' want' : ''}"><div class="card-h">${s.t}</div><div class="fgrid">${s.f.map(f => fieldHTML(col, f, it)).join('')}</div></fieldset>`).join('')}
       <div class="card">
         <div class="card-h">Notes & historique ${it.notes.length ? `<span class="n">${it.notes.length}</span>` : ''}</div>
         <ul class="notes" id="notes">${it.notes.map((n, i) => `<li><div class="nt"><span class="nd">${fmtDate(n.d)}</span>${esc(n.t)}</div><button type="button" data-delnote="${i}" aria-label="Supprimer la note">×</button></li>`).join('')}</ul>
@@ -1267,20 +1275,22 @@ function replaceInPlace(target, src) {
   Object.assign(target, src);
 }
 
-const reglagesOf = d => ({ quartiers: d.quartiers, residences: d.residences });
+const reglagesOf = d => ({ quartiers: d.quartiers, residences: d.residences, v: 4 });
 // Construit les listes du pôle affiché à partir des lignes connues (mêmes objets : un formulaire ouvert reste lié à sa fiche)
 function buildData() {
   const pole = ui.pole;
   const d = { ...defaults(), theme: data.theme, signature: Srv.me?.signature || '', modeles: [] };
+  let villes = false;
   for (const r of Srv.store.values()) {
     if (r.deleted || r.pole !== pole) continue;
-    if (r.kind === 'reglages') { if (Array.isArray(r.data?.quartiers)) d.quartiers = r.data.quartiers; if (Array.isArray(r.data?.residences)) d.residences = r.data.residences; continue; }
+    if (r.kind === 'reglages') { if (Array.isArray(r.data?.quartiers)) d.quartiers = r.data.quartiers; if (Array.isArray(r.data?.residences)) d.residences = r.data.residences; if (!(r.data?.v >= 4)) villes = true; continue; }
     // Contenu illisible : ignoré (jamais supprimé pour autant) ; l’identifiant de la fiche est celui de la ligne
     if (!isObj(r.data)) continue;
     r.data.id = r.id;
     const key = KEY_OF_KIND[r.kind]; if (key) d[key].push(r.data);
   }
   migrate(d);
+  if (villes) addVilles(d);
   for (const r of Srv.store.values()) if (r.pole === pole && !r.deleted && r.kind !== 'reglages') Srv.snap.set(r.id, JSON.stringify(r.data));
   // Réglages : on garde la version stockée telle quelle, pour renvoyer une liste mise à jour (ex. secteurs officiels)
   if (Srv.store.has(`reglages-${pole}`)) Srv.snap.set(`reglages-${pole}`, JSON.stringify(Srv.store.get(`reglages-${pole}`).data));
