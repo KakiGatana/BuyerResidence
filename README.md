@@ -42,10 +42,11 @@ et candidats / biens à louer (pôle Location), avec envoi de messages types (SM
 ## Sécurité
 
 **Serveur (`supabase/schema.sql`)**
-- Inscription uniquement sur invitation d'un responsable (Réglages → Équipe) ; le compte reçoit directement son pôle et son rôle.
+- Inscription uniquement avec le lien d'invitation d'un responsable (Réglages → Équipe) : email invité + code secret de 64 caractères tiré par le serveur, valable 7 jours et une seule fois. Le compte reçoit directement son pôle et son rôle.
 - Règles ligne par ligne : chaque pôle ne lit que ses fiches ; les visiteurs non connectés n'ont accès à rien.
 - Auteur, dates, identifiant et type de fiche fixés par le serveur ; un agent ne peut ni changer de pôle, ni supprimer la fiche d'un collègue.
-- Contrôles sur les données : identifiant simple, type connu, taille limitée.
+- Contrôles sur les données : identifiant simple, type connu, 32 Ko maximum par fiche.
+- Limite de 600 écritures par agent et par tranche de 10 minutes (un compte piraté ne peut pas remplir la base).
 - Historique de chaque modification (60 jours) et corbeille (30 jours), restaurables par un responsable ; purge automatique (RGPD).
 - Fonctions de sécurité dans un schéma privé, non exposé par l'API ; API GraphQL retirée.
 
