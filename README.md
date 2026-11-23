@@ -29,6 +29,17 @@ et candidats / biens à louer (pôle Location), avec envoi de messages types (SM
 - La clé « publishable » dans `index.html` est publique par nature. La clé secrète
   (`sb_secret_…`) ne doit jamais apparaître dans ce dépôt.
 
+## Hébergement
+
+L'app est publiée sur **Cloudflare Pages** : https://carnet-velizy.pages.dev/ (projet `carnet-velizy`).
+Le dépôt GitHub sert seulement de sauvegarde du code et peut être privé.
+
+Mise en ligne : copier dans un dossier les fichiers publics (`index.html`, `app.js`, `theme.js`, `sw.js`, `manifest.webmanifest`, `icon.svg`, `version.json`, `_headers`, `fonts/`), jamais `prive/`, puis :
+
+    npx wrangler pages deploy <dossier> --project-name carnet-velizy --branch main
+
+`_headers` ajoute les en-têtes de sécurité (CSP, HSTS, interdiction d'affichage dans une autre page, pas d'indexation).
+
 ## Fichiers
 
 - `index.html` : la page (sans JavaScript intégré, pour la règle de sécurité CSP)

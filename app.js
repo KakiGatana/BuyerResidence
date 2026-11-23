@@ -3,7 +3,7 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const app = $('#app');
 const KEY = 'carnet-acquereurs-v1';
-const APP_VERSION = '15'; // À changer à chaque mise en ligne, avec version.json
+const APP_VERSION = '16'; // À changer à chaque mise en ligne, avec version.json
 const DAY = 86400000;
 
 // Serveur de l'agence (Supabase). La clé « publishable » est faite pour être publique :
@@ -213,6 +213,7 @@ function migrate(d) {
     d.version = 2;
   }
   for (const b of d.biens) b.nom ??= '';
+  for (const v of d.vendeurs) if (v && OLD_VEND[v.statut]) v.statut = OLD_VEND[v.statut];
   if (!Array.isArray(d.residences)) d.residences = [...RESIDENCES];
   // Ancienne liste de quartiers devinée → secteurs officiels (en gardant ceux ajoutés à la main)
   if (d.quartiers.includes('Vélizy-Bas (Village)')) {
@@ -265,7 +266,9 @@ applyTheme();
 const F = (k, l, t, o = {}) => ({ k, l, t, ...o });
 const fullName = a => [a.prenom, a.nom].filter(Boolean).join(' ');
 const fmtPieces = a => [a.piecesMin ? `${a.piecesMin}${a.piecesMin >= 5 ? '+' : ''} p.` : '', a.chambresMin ? `${a.chambresMin}${a.chambresMin >= 4 ? '+' : ''} ch.` : ''].filter(Boolean).join(' / ');
-const CLOSED = { vend: ['mandat', 'non'], pige: ['mandat', 'refus'] };
+const CLOSED = { vend: ['bac', 'sus', 'vda', 'vha', 'non'], pige: ['mandat', 'refus'] };
+// Anciens statuts vendeurs → codes d'ACTION
+const OLD_VEND = { contact: 'pro', discussion: 'tche', estimation: 'estim', mandat: 'bac' };
 const aRelancer = (col, it) => !!it.relance && it.relance <= todayStr() && !(CLOSED[col] || []).includes(it.statut);
 const relanceMeta = (col, it) => it.relance ? (aRelancer(col, it) ? `<span class="late">À relancer (${fmtDay(it.relance)})</span>` : `Relance le ${fmtDay(it.relance)}`) : '';
 const joinMeta = (...p) => p.filter(Boolean).join(' · ');
@@ -352,7 +355,7 @@ const SEC = {
   vend: {
     key: 'vendeurs', tab: 'Vendeurs', title: 'Prospects vendeurs', one: 'prospect', many: 'prospects', neu: 'Nouveau prospect',
     icon: 'home', person: true, select: true, sorts: ['recent', 'relance', 'nom'], searchPh: 'Nom, adresse, numéro…',
-    statuts: [{ k: 'contact', l: 'À contacter', c: 'blue' }, { k: 'discussion', l: 'En discussion', c: 'amber' }, { k: 'estimation', l: 'Estimation faite', c: 'violet' }, { k: 'mandat', l: 'Mandat signé', c: 'green' }, { k: 'non', l: 'Pas vendeur', c: 'grey' }],
+    statuts: [{ k: 'pro', l: 'Pro · prospect', c: 'blue' }, { k: 'tche', l: 'Tche · touché', c: 'amber' }, { k: 'estim', l: 'Estim · estimation faite', c: 'violet' }, { k: 'bac', l: 'Bac · à commercialiser', c: 'green' }, { k: 'sus', l: 'Sus · suspendu', c: 'grey' }, { k: 'vda', l: 'Vda · vendu agence', c: 'green' }, { k: 'vha', l: 'Vha · vendu hors agence', c: 'grey' }, { k: 'non', l: 'Pas vendeur', c: 'grey' }],
     name: v => fullName(v) || v.adresse || 'Sans nom',
     valid: v => v.prenom || v.nom || v.adresse,
     sections: () => [
@@ -793,14 +796,14 @@ function renderFiche(col, id) {
   if (acts2) acts2.onclick = e => {
     const b = e.target.closest('[data-conv]'); if (!b) return;
     if (b.dataset.conv === 'vend') {
-      const v = Object.assign(blankOf('vend'), { nom: it.nom, tel: it.tel, adresse: it.adresse, typeBien: it.type, pieces: it.pieces, surface: it.surface, estimation: it.prix, origine: 'Pige', statut: 'discussion' });
+      const v = Object.assign(blankOf('vend'), { nom: it.nom, tel: it.tel, adresse: it.adresse, typeBien: it.type, pieces: it.pieces, surface: it.surface, estimation: it.prix, origine: 'Pige', statut: 'tche' });
       v.notes.push({ d: Date.now(), t: `Créé depuis la pige${it.lien ? ' : ' + it.lien : ''}` });
       data.vendeurs.push(v); it.notes.unshift({ d: Date.now(), t: 'Passé en prospect vendeur' }); save();
       toast('Prospect vendeur créé ✓'); location.hash = `#/e/vend/${esc(v.id)}`;
     } else {
       const bn = Object.assign(blankOf('bien'), { type: it.typeBien, adresse: it.adresse, quartier: it.quartier, pieces: it.pieces, surface: it.surface, prix: it.estimation, proprietaire: fullName(it), proprioTel: it.tel, debut: todayStr() });
       bn.notes.push({ d: Date.now(), t: `Mandat créé depuis le prospect ${fullName(it)}` });
-      data.biens.push(bn); it.statut = 'mandat'; it.notes.unshift({ d: Date.now(), t: 'Mandat signé' }); save();
+      data.biens.push(bn); it.statut = col === 'vend' ? 'bac' : 'mandat'; it.notes.unshift({ d: Date.now(), t: 'Mandat signé' }); save();
       toast('Mandat créé ✓ Complétez-le'); location.hash = `#/e/bien/${esc(bn.id)}`;
     }
   };
@@ -1515,6 +1518,13 @@ function renderWait(kind) {
   $('#retry').onclick = async e => {
     e.target.disabled = true; e.target.textContent = 'Vérification…';
     await boot();
+// Ancienne adresse (GitHub Pages) : Carnet a déménagé sur Cloudflare. Les fiches sont sur le serveur, rien n'est perdu.
+if (location.hostname.endsWith('github.io')) {
+  const m = document.createElement('a');
+  m.href = PUBLIC_URL; m.className = 'moved';
+  m.textContent = 'Carnet change d’adresse. Appuyez ici, connectez-vous, ajoutez la nouvelle app à l’écran d’accueil puis supprimez l’ancienne.';
+  document.body.appendChild(m);
+}
     // Toujours le même écran : on le dit, sinon on croit que le bouton ne fait rien
     if ($('#retry')) toast(kind === 'pending' && Srv.me && !Srv.me.pole ? 'Toujours en attente : aucun pôle attribué à ce compte pour l’instant' : 'Toujours impossible pour le moment');
   };
@@ -1781,7 +1791,7 @@ async function loadTrash() {
   };
 }
 // Adresse publique de l'app (le lien envoyé aux agents, même si on teste en local)
-const PUBLIC_URL = 'https://kakigatana.github.io/BuyerResidence/';
+const PUBLIC_URL = 'https://carnet-velizy.pages.dev/';
 async function inviteAgent(email, code) {
   const text = `Bonjour ! Voici Carnet, l'app de l'agence pour nos acquéreurs, vendeurs et mandats. Ton lien d'invitation (personnel, valable ${INVITE_DAYS} jours, ne le transfère pas) :\n${PUBLIC_URL}#invitation=${code}\n\n`
     + `1. Ouvre ce lien sur ton téléphone et crée ton compte avec cette adresse : ${email}\n`
