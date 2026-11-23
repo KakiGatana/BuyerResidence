@@ -1,0 +1,24 @@
+# En-têtes de sécurité envoyés par Cloudflare Pages (en plus de la règle CSP écrite dans index.html)
+/*
+  Content-Security-Policy: default-src 'none'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.115.0/dist/umd/supabase.js; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://nyaancupmdxutiicejbw.supabase.co wss://nyaancupmdxutiicejbw.supabase.co; manifest-src 'self'; worker-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()
+  Cross-Origin-Opener-Policy: same-origin
+  X-Robots-Tag: noindex, nofollow
+
+# Toujours la dernière version de l'app
+/
+  Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache
+/app.js
+  Cache-Control: no-cache
+/theme.js
+  Cache-Control: no-cache
+/sw.js
+  Cache-Control: no-cache
+/version.json
+  Cache-Control: no-store
